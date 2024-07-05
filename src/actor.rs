@@ -1,12 +1,13 @@
+mod extension;
 mod handler;
 mod message;
 mod context;
 mod state;
 pub mod refs;
-mod extension;
 
 pub use self::{
     context::*,
+    extension::*,
     handler::*,
     message::*,
     state::*,
