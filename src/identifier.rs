@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub struct ActorId {
-    id: Arc<str>,
+    pub(crate) id: Arc<str>,
 }
 
 impl ActorId {
