@@ -8,7 +8,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use uuid::Uuid;
 
 use lutetium::actor::{Actor, Context, Handler, Message};
-use lutetium::actor::refs::behavior::ErrorFlattenBehavior;
+use lutetium::actor::refs::ErrorFlattenAction;
 use lutetium::errors::ActorError;
 use lutetium::system::ActorSystem;
 

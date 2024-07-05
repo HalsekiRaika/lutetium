@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;

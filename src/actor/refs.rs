@@ -5,10 +5,11 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::oneshot;
 
 use crate::actor::{Actor, Context, Handler, Message, Terminate};
-use crate::actor::refs::behavior::{ErrorFlattenBehavior, RegularBehavior};
 use crate::errors::ActorError;
 
-pub mod behavior;
+mod action;
+
+pub use self::action::*;
 
 pub struct ActorRef<A: Actor> {
     pub(crate) ctx: Arc<RefContext<A>>,
@@ -17,7 +18,7 @@ pub struct ActorRef<A: Actor> {
 #[async_trait::async_trait]
 impl<A: Actor> DynRef for ActorRef<A> {
     async fn shutdown(&self) -> Result<(), ActorError> {
-        ErrorFlattenBehavior::ask(self, Terminate).await
+        ErrorFlattenAction::ask(self, Terminate).await
     }
     
     fn as_any(&self) -> &dyn Any {
@@ -45,7 +46,7 @@ impl<A: Actor> ActorRef<A> {
     }
 }
 
-impl<A: Actor> RegularBehavior<A> for ActorRef<A> {
+impl<A: Actor> RegularAction<A> for ActorRef<A> {
     async fn ask<M: Message>(
         &self,
         msg: M,
@@ -86,13 +87,13 @@ impl<A: Actor> RegularBehavior<A> for ActorRef<A> {
     }
 }
 
-impl<A: Actor> ErrorFlattenBehavior<A> for ActorRef<A> {
+impl<A: Actor> ErrorFlattenAction<A> for ActorRef<A> {
     async fn ask<M: Message>(&self, msg: M) -> Result<A::Accept, A::Rejection>
         where
             A: Handler<M>,
             A::Rejection: From<ActorError>,
     {
-        RegularBehavior::ask(self, msg).await.unwrap_or_else(|e| Err(e.into()))
+        RegularAction::ask(self, msg).await.unwrap_or_else(|e| Err(e.into()))
     }
 
     async fn tell<M: Message>(&self, msg: M) -> Result<(), A::Rejection>
@@ -100,7 +101,7 @@ impl<A: Actor> ErrorFlattenBehavior<A> for ActorRef<A> {
             A: Handler<M>,
             A::Rejection: From<ActorError>,
     {
-        RegularBehavior::tell(self, msg).await.unwrap_or_else(|e| Err(e.into()))
+        RegularAction::tell(self, msg).await.unwrap_or_else(|e| Err(e.into()))
     }
 }
 
