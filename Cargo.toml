@@ -20,3 +20,5 @@ serde = { version = "^1", features = ["derive", "rc"],  optional = true }
 anyhow = "^1"
 uuid = { version = "^1", features = ["serde", "v7"] }
 tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
+
+flexbuffers = { version = "^2" }
