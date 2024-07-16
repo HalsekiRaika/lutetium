@@ -24,11 +24,11 @@ impl Display for ActorId {
     }
 }
 
-pub trait IntoActorId {
+pub trait IntoActorId: Sync + Send {
     fn into_actor_id(self) -> ActorId;
 }
 
-pub trait ToActorId {
+pub trait ToActorId: Sync + Send {
     fn to_actor_id(&self) -> ActorId;
 }
 
