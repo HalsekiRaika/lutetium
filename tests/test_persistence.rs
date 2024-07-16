@@ -2,16 +2,17 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use uuid::Uuid;
+
 use lutetium::actor::{Context, Handler, Message};
-use lutetium::actor::refs::RegularAction;
-use lutetium::errors::ActorError;
+use lutetium::actor::refs::{DynRef, RegularAction};
+use lutetium::persistence::{PersistenceProvider, RecoverSnapShot, SnapShot, SnapShotProtocol};
 use lutetium::persistence::actor::PersistenceActor;
-use lutetium::persistence::{SnapShotProtocol, PersistenceProvider};
 use lutetium::persistence::errors::PersistError;
-use lutetium::persistence::identifier::PersistenceId;
+use lutetium::persistence::identifier::{PersistenceId, ToPersistenceId};
 use lutetium::system::ActorSystem;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -30,13 +31,15 @@ impl Message for MyCommand {
 }
 
 impl PersistenceActor for MyActor {
-    
+    fn persistence_id(&self) -> PersistenceId {
+        self.id.to_persistence_id()
+    }
 }
 
 #[async_trait::async_trait]
 impl Handler<MyCommand> for MyActor {
     type Accept = ();
-    type Rejection = ActorError;
+    type Rejection = MyError;
 
     async fn call(&mut self, msg: MyCommand, _ctx: &mut Context) -> Result<Self::Accept, Self::Rejection> {
         match msg {
@@ -44,10 +47,35 @@ impl Handler<MyCommand> for MyActor {
             MyCommand::Remove { ref k } => self.data.remove(k)
         };
         
+        self.snapshot(self, _ctx).await
+            .map_err(|_e| MyError::Persist)?;
+        
         Ok(())
     }
 }
 
+impl SnapShot for MyActor {
+    fn as_bytes(&self) -> Result<Vec<u8>, PersistError> {
+        flexbuffers::to_vec(self).map_err(|_e| PersistError::Serialization)
+    }
+
+    fn from_bytes(bin: &[u8]) -> Result<Self, PersistError> {
+        flexbuffers::from_slice(bin).map_err(|_e| PersistError::Serialization)
+    }
+}
+
+#[async_trait::async_trait]
+impl RecoverSnapShot for MyActor {
+    async fn recover_snapshot(&mut self, snapshot: MyActor, _ctx: &mut Context) {
+        self.data = snapshot.data;
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum MyError {
+    #[error("no context")]
+    Persist
+}
 
 pub struct InMemoryDataBase {
     db: Arc<RwLock<HashMap<PersistenceId, Vec<u8>>>>
@@ -104,6 +132,7 @@ async fn persistence_actor_run() -> anyhow::Result<()> {
     let refs = system.spawn(id, actor).await?;
     
     refs.tell(MyCommand::Add { k: "aaa".to_string(), v: "111".to_string() }).await??;
+    refs.shutdown().await?;
     
     Ok(())
 }

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::actor::{Context, FromContext};
 use crate::persistence::errors::PersistError;
 use crate::persistence::identifier::PersistenceId;
+use crate::persistence::SnapShot;
 
 #[async_trait::async_trait]
 pub trait PersistenceProvider: 'static + Sync + Send {
@@ -19,16 +20,18 @@ impl SnapShotProtocol {
     }
 
 
-    pub async fn insert(&self, bin: Vec<u8>) -> Result<(), PersistError> {
-        todo!()
+    pub async fn insert<S: SnapShot>(&self, id: &PersistenceId, snapshot: &S) -> Result<(), PersistError> {
+        self.0.insert(id, snapshot.as_bytes()?).await
     }
 
-    pub async fn select(&self, id: &PersistenceId) -> Result<A, PersistError> {
-        todo!()
+    pub async fn select<S: SnapShot>(&self, id: &PersistenceId) -> Result<S, PersistError> {
+        let bin = self.0.select(id).await?;
+        S::from_bytes(&bin)
     }
 
-    pub async fn delete(&self, id: &PersistenceId) -> Result<A, PersistError> {
-        todo!()
+    pub async fn delete<S: SnapShot>(&self, id: &PersistenceId) -> Result<S, PersistError> {
+        let bin = self.0.delete(id).await?;
+        S::from_bytes(&bin)
     }
 }
 
