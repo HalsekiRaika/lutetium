@@ -1,4 +1,11 @@
-mod actor;
-mod identifier;
+pub mod actor;
+pub mod errors;
+pub mod identifier;
 mod extension;
-mod errors;
+mod snapshot;
+mod journal;
+
+pub use self::{
+    extension::*,
+    snapshot::*
+};

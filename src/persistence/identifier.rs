@@ -3,7 +3,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use crate::identifier::ActorId;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct PersistenceId(Arc<str>);
 
 impl PersistenceId {
@@ -32,13 +32,13 @@ pub trait ToPersistenceId: 'static + Sync + Send {
     fn to_persistence_id(&self) -> PersistenceId;
 }
 
-impl<T: ToString + Sync + Send> IntoPersistenceId for T {
+impl<T: ToString + Sync + Send + 'static> IntoPersistenceId for T {
     fn into_persistence_id(self) -> PersistenceId {
         PersistenceId::new(self.to_string())
     }
 }
 
-impl<T: ToString + Sync + Send> ToPersistenceId for T {
+impl<T: ToString + Sync + Send + 'static> ToPersistenceId for T {
     fn to_persistence_id(&self) -> PersistenceId {
         PersistenceId::new(self.to_string())
     }
