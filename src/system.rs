@@ -1,5 +1,6 @@
 use std::ops::Deref;
 use std::sync::Arc;
+use crate::actor::Context;
 
 pub use self::extension::*;
 pub use self::root::*;
@@ -26,6 +27,10 @@ impl Clone for ActorSystem {
 impl ActorSystem {
     pub fn builder() -> System {
         System::default()
+    }
+    
+    pub fn root_context(&self) -> Context {
+        Context::new(self.system.clone(), self.root.clone().into())
     }
 }
 

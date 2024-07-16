@@ -29,3 +29,9 @@ impl Deref for Root {
         &self.refs
     }
 }
+
+impl From<Root> for SupervisorRef {
+    fn from(value: Root) -> Self {
+        value.refs
+    }
+}

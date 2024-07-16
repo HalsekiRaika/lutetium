@@ -8,7 +8,7 @@ use tracing::Instrument;
 
 use crate::actor::{Actor, Context, Handler, Message};
 use crate::actor::refs::{ActorRef, AnyRef, Applier, DynRef};
-use crate::actor::refs::action::RegularAction;
+use crate::actor::refs::RegularAction;
 use crate::errors::ActorError;
 use crate::identifier::{ActorId, IntoActorId, ToActorId};
 use crate::system::System;
