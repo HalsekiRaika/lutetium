@@ -4,6 +4,8 @@ mod message;
 mod context;
 mod state;
 pub mod refs;
+mod lifecycle;
+mod behavior;
 
 pub use self::{
     context::*,
@@ -21,4 +23,17 @@ pub trait Actor: 'static + Sync + Send + Sized {
         tracing::debug!(name: "actor", "activate");
         Ok(())
     }
+}
+
+impl<A: Actor> IntoActor for A {
+    type Actor = Self;
+    fn into_actor(self) -> Self::Actor {
+        self
+    }
+}
+
+
+pub trait IntoActor: 'static + Sync + Send + Sized {
+    type Actor: Actor;
+    fn into_actor(self) -> Self::Actor;
 }
