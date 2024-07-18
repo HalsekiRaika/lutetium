@@ -55,3 +55,18 @@ impl From<PersistenceId> for ActorId {
         Self { id: value.0 }
     }
 }
+
+
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize)]
+pub struct SequenceId(i64);
+
+impl SequenceId {
+    pub fn new() -> SequenceId {
+        Self(0)
+    }
+    
+    pub fn next(mut prev: SequenceId) -> SequenceId {
+        prev.0 += 1;
+        prev
+    }
+}

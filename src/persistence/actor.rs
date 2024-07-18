@@ -4,7 +4,7 @@ use crate::errors::ActorError;
 use crate::persistence::errors::PersistError;
 use crate::persistence::extension::SnapShotProtocol;
 use crate::persistence::identifier::PersistenceId;
-use crate::persistence::journal::RecoverJournal;
+use crate::persistence::journal::{Event, RecoverJournal};
 use crate::persistence::snapshot::{RecoverSnapShot, SnapShot};
 
 #[async_trait::async_trait]
@@ -17,9 +17,8 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
     #[allow(unused_variables)]
     async fn post_recovery(&mut self, ctx: &mut Context) -> Result<(), ActorError> { Ok(()) }
     
-    async fn persist<M>(&self, message: M, ctx: &mut Context) -> Result<(), PersistError> 
-        where Self: RecoverJournal<M>,
-              M: DeserializeOwned + Serialize + 'static + Sync + Send
+    async fn persist<E: Event>(&self, event: E, ctx: &mut Context) -> Result<(), PersistError> 
+        where Self: RecoverJournal<E>,
     {
         let _store = SnapShotProtocol::from_context(ctx).await?;
         
