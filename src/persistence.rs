@@ -7,5 +7,6 @@ mod journal;
 
 pub use self::{
     extension::*,
-    snapshot::*
+    snapshot::*,
+    journal::*,
 };
