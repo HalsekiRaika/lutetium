@@ -61,8 +61,11 @@ impl From<PersistenceId> for ActorId {
 pub struct SequenceId(i64);
 
 impl SequenceId {
-    pub fn new() -> SequenceId {
-        Self(0)
+    pub const MIN: SequenceId = SequenceId(i64::MIN);
+    pub const MAX: SequenceId = SequenceId(i64::MAX);
+    
+    pub fn new(seq: i64) -> SequenceId {
+        Self(seq)
     }
     
     pub fn next(mut prev: SequenceId) -> SequenceId {

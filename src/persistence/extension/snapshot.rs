@@ -26,12 +26,12 @@ impl SnapShotProtocol {
 
     pub async fn select<S: SnapShot>(&self, id: &PersistenceId) -> Result<S, PersistError> {
         let bin = self.0.select(id).await?;
-        S::from_bytes(&bin)
+        Ok(S::from_bytes(&bin)?)
     }
 
     pub async fn delete<S: SnapShot>(&self, id: &PersistenceId) -> Result<S, PersistError> {
         let bin = self.0.delete(id).await?;
-        S::from_bytes(&bin)
+        Ok(S::from_bytes(&bin)?)
     }
 }
 

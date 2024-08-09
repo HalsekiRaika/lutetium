@@ -3,14 +3,14 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::actor::Context;
-use crate::persistence::errors::PersistError;
+use crate::persistence::errors::{DeserializeError, PersistError, SerializeError};
 use crate::persistence::identifier::SequenceId;
 
 pub trait Event: 'static + Sync + Send + Sized
     where Self: Serialize + DeserializeOwned
 { 
-    fn as_bytes(&self) -> Result<Vec<u8>, PersistError>;
-    fn from_bytes(bytes: &[u8]) -> Result<Self, PersistError>;   
+    fn as_bytes(&self) -> Result<Vec<u8>, SerializeError>;
+    fn from_bytes(bytes: &[u8]) -> Result<Self, DeserializeError>;
 }
 
 #[async_trait::async_trait]
@@ -43,5 +43,13 @@ impl<T: RecoverJournal<E>, E: Event> RecoverJournalBatch<E> for T {
 pub struct Batch<E: Event>(BTreeMap<SequenceId, E>);
 
 impl<E: Event> Batch<E> {
-    
+    pub fn new(batch: BTreeMap<SequenceId, E>) -> Batch<E> {
+        Self(batch)
+    }
+}
+
+impl<E: Event> Default for Batch<E> {
+    fn default() -> Self {
+        Self(BTreeMap::default())
+    }
 }
