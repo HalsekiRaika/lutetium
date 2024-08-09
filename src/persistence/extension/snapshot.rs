@@ -6,16 +6,16 @@ use crate::persistence::identifier::PersistenceId;
 use crate::persistence::SnapShot;
 
 #[async_trait::async_trait]
-pub trait PersistenceProvider: 'static + Sync + Send {
+pub trait SnapShotProvider: 'static + Sync + Send {
     async fn insert(&self, id: &PersistenceId, bin: Vec<u8>) -> Result<(), PersistError>;
     async fn select(&self, id: &PersistenceId) -> Result<Vec<u8>, PersistError>;
     async fn delete(&self, id: &PersistenceId) -> Result<Vec<u8>, PersistError>;
 }
 
-pub struct SnapShotProtocol(Arc<dyn PersistenceProvider>);
+pub struct SnapShotProtocol(Arc<dyn SnapShotProvider>);
 
 impl SnapShotProtocol {
-    pub fn new(provider: impl PersistenceProvider) -> SnapShotProtocol {
+    pub fn new(provider: impl SnapShotProvider) -> SnapShotProtocol {
         Self(Arc::new(provider))
     }
 
