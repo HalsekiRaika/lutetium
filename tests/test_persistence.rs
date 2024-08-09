@@ -9,9 +9,9 @@ use uuid::Uuid;
 
 use lutetium::actor::{Context, Handler, Message};
 use lutetium::actor::refs::{DynRef, RegularAction};
-use lutetium::persistence::{PersistenceProvider, RecoverSnapShot, SnapShot, SnapShotProtocol};
+use lutetium::persistence::{Event, SnapShotProvider, RecoverJournal, RecoverSnapShot, SnapShot, SnapShotProtocol};
 use lutetium::persistence::actor::PersistenceActor;
-use lutetium::persistence::errors::PersistError;
+use lutetium::persistence::errors::{DeserializeError, PersistError, SerializeError};
 use lutetium::persistence::identifier::{PersistenceId, ToPersistenceId};
 use lutetium::system::ActorSystem;
 
@@ -30,6 +30,53 @@ impl Message for MyCommand {
     
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum MyEvent {
+    Added { k: String, v: String },
+    Removed { k: String }
+}
+
+impl Event for MyEvent {
+    fn as_bytes(&self) -> Result<Vec<u8>, SerializeError> {
+        Ok(flexbuffers::to_vec(self)?)
+    }
+    
+    fn from_bytes(bin: &[u8]) -> Result<Self, DeserializeError> {
+        Ok(flexbuffers::from_slice(bin)?)
+    }
+}
+
+impl SnapShot for MyActor {
+    fn as_bytes(&self) -> Result<Vec<u8>, SerializeError> {
+        Ok(flexbuffers::to_vec(self)?)
+    }
+    
+    fn from_bytes(bin: &[u8]) -> Result<Self, DeserializeError> {
+        Ok(flexbuffers::from_slice(bin)?)
+    }
+}
+
+#[async_trait::async_trait]
+impl RecoverSnapShot for MyActor {
+    async fn recover_snapshot(&mut self, snapshot: MyActor, _ctx: &mut Context) {
+        self.data = snapshot.data;
+    }
+}
+
+#[async_trait::async_trait]
+impl RecoverJournal<MyEvent> for MyActor {
+    async fn recover_journal(&mut self, event: MyEvent, _ctx: &mut Context) {
+        match event {
+            MyEvent::Added { k, v } => {
+                self.data.insert(k, v);
+            },
+            MyEvent::Removed { ref k } => {
+                self.data.remove(k);
+            },
+        }
+    }
+}
+
 impl PersistenceActor for MyActor {
     fn persistence_id(&self) -> PersistenceId {
         self.id.to_persistence_id()
@@ -38,36 +85,25 @@ impl PersistenceActor for MyActor {
 
 #[async_trait::async_trait]
 impl Handler<MyCommand> for MyActor {
-    type Accept = ();
+    type Accept = MyEvent;
     type Rejection = MyError;
 
     async fn call(&mut self, msg: MyCommand, _ctx: &mut Context) -> Result<Self::Accept, Self::Rejection> {
-        match msg {
-            MyCommand::Add { k, v } => self.data.insert(k, v),
-            MyCommand::Remove { ref k } => self.data.remove(k)
+        let ev = match msg {
+            MyCommand::Add { k, v } => {
+                self.data.insert(k.clone(), v.clone());
+                MyEvent::Added { k, v }
+            },
+            MyCommand::Remove { k } => {
+                self.data.remove(&k);
+                MyEvent::Removed { k }
+            }
         };
         
         self.snapshot(self, _ctx).await
             .map_err(|_e| MyError::Persist)?;
         
-        Ok(())
-    }
-}
-
-impl SnapShot for MyActor {
-    fn as_bytes(&self) -> Result<Vec<u8>, PersistError> {
-        flexbuffers::to_vec(self).map_err(|_e| PersistError::Serialization)
-    }
-
-    fn from_bytes(bin: &[u8]) -> Result<Self, PersistError> {
-        flexbuffers::from_slice(bin).map_err(|_e| PersistError::Serialization)
-    }
-}
-
-#[async_trait::async_trait]
-impl RecoverSnapShot for MyActor {
-    async fn recover_snapshot(&mut self, snapshot: MyActor, _ctx: &mut Context) {
-        self.data = snapshot.data;
+        Ok(ev)
     }
 }
 
@@ -94,7 +130,7 @@ impl Default for InMemoryDataBase {
 }
 
 #[async_trait::async_trait]
-impl PersistenceProvider for InMemoryDataBase {
+impl SnapShotProvider for InMemoryDataBase {
     async fn insert(&self, id: &PersistenceId, bin: Vec<u8>) -> Result<(), PersistError> {
         self.db.write().await.insert(id.to_owned(), bin);
         Ok(())
