@@ -1,11 +1,9 @@
+pub mod refs;
 mod extension;
 mod handler;
 mod message;
 mod context;
 mod state;
-pub mod refs;
-mod lifecycle;
-mod behavior;
 
 pub use self::{
     context::*,
