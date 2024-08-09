@@ -1,10 +1,10 @@
-use serde::{de::DeserializeOwned, Serialize};
 use crate::actor::{Actor, Context, FromContext};
 use crate::errors::ActorError;
 use crate::persistence::errors::PersistError;
 use crate::persistence::extension::SnapShotProtocol;
 use crate::persistence::identifier::PersistenceId;
 use crate::persistence::journal::{Event, RecoverJournal};
+use crate::persistence::JournalProtocol;
 use crate::persistence::snapshot::{RecoverSnapShot, SnapShot};
 
 #[async_trait::async_trait]
@@ -17,12 +17,20 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
     #[allow(unused_variables)]
     async fn post_recovery(&mut self, ctx: &mut Context) -> Result<(), ActorError> { Ok(()) }
     
-    async fn persist<E: Event>(&self, event: E, ctx: &mut Context) -> Result<(), PersistError> 
+    async fn persist<E: Event>(&self, event: &E, ctx: &mut Context) -> Result<(), PersistError> 
         where Self: RecoverJournal<E>,
     {
-        let _store = SnapShotProtocol::from_context(ctx).await?;
-        
-        // Todo: Impl message persist process
+        let journal = JournalProtocol::from_context(ctx).await?;
+       
+        let mut retry = 0;
+        while let Err(e) = journal.insert(event).await {
+            tracing::error!("{e}");
+            retry += 1;
+            
+            if retry > 5 {
+                break;
+            }
+        }
         
         Ok(())
     }
