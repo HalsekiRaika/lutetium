@@ -6,7 +6,7 @@ use async_trait::async_trait;
 
 use tracing::Instrument;
 
-use crate::actor::{Actor, Context, Handler, Message};
+use crate::actor::{Actor, Context, Handler, Message, Prepare};
 use crate::actor::refs::{ActorRef, AnyRef, Applier, DynRef};
 use crate::actor::refs::RegularAction;
 use crate::errors::ActorError;
@@ -56,6 +56,11 @@ impl Supervisor {
 
 impl SupervisorRef {
     pub async fn spawn<A: Actor>(&self, id: impl IntoActorId, actor: A) -> Result<ActorRef<A>, ActorError> {
+        self.0.ask(RunnableActor { id: id.into_actor_id(), actor }).await?
+    }
+    
+    pub async fn spawn_from<M: Message, A: Prepare<M>>(&self, msg: M) -> Result<ActorRef<A>, ActorError> {
+        let (id, actor) = A::prepare(msg).await?;
         self.0.ask(RunnableActor { id: id.into_actor_id(), actor }).await?
     }
     

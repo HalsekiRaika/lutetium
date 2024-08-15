@@ -12,7 +12,7 @@ pub enum ActorError {
         id: ActorId
     },
 
-    #[error("")]
+    #[error("Could not execute callback, channel may be closed.")]
     CallBackSend,
 
     #[error("May have passed different type information than what was expected when downcasting from `Any` to type.")]
@@ -22,4 +22,7 @@ pub enum ActorError {
     MissingExtension {
         ext: &'static str
     },
+    
+    #[error("Not enough values needed to build the structure.")]
+    NotEnoughValue
 }
