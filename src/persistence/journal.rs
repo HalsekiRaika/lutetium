@@ -1,9 +1,9 @@
-use std::collections::BTreeMap;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 use crate::actor::Context;
-use crate::persistence::errors::{DeserializeError, PersistError, SerializeError};
+use crate::persistence::errors::{DeserializeError, SerializeError};
 use crate::persistence::identifier::SequenceId;
 
 pub trait Event: 'static + Sync + Send + Sized

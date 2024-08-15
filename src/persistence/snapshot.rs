@@ -1,5 +1,5 @@
 use crate::actor::Context;
-use crate::persistence::errors::{DeserializeError, PersistError, SerializeError};
+use crate::persistence::errors::{DeserializeError, SerializeError};
 
 pub trait SnapShot: 'static + Sync + Send + Sized {
     fn as_bytes(&self) -> Result<Vec<u8>, SerializeError>;
