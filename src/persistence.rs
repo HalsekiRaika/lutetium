@@ -4,6 +4,7 @@ pub mod identifier;
 mod extension;
 mod snapshot;
 mod journal;
+mod recovery;
 
 pub use self::{
     extension::*,
