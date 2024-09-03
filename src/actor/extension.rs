@@ -1,6 +1,7 @@
 use std::any::type_name;
 use crate::actor::{Context, FromContext};
 use crate::errors::ActorError;
+use crate::system::ExtensionMissingError;
 
 pub struct Extension<T>(pub T);
 
@@ -15,9 +16,9 @@ impl<T> FromContext for Extension<T>
             .system()
             .ext
             .get::<T>()
-            .ok_or_else(|| ActorError::MissingExtension {
-                ext: type_name::<T>()
-            })
+            .ok_or_else(|| ActorError::MissingExtension(ExtensionMissingError {
+                module: type_name::<T>()
+            }))
             .cloned()?;
         Ok(Extension(ext))
     }

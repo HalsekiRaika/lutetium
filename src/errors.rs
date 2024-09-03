@@ -1,4 +1,5 @@
 use crate::identifier::ActorId;
+use crate::system::ExtensionMissingError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ActorError {
@@ -18,10 +19,8 @@ pub enum ActorError {
     #[error("May have passed different type information than what was expected when downcasting from `Any` to type.")]
     DownCastFromAny,
     
-    #[error("")]
-    MissingExtension {
-        ext: &'static str
-    },
+    #[error(transparent)]
+    MissingExtension(ExtensionMissingError),
     
     #[error("Not enough values needed to build the structure.")]
     NotEnoughValue

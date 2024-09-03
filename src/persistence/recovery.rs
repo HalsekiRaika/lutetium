@@ -1,5 +1,62 @@
+use std::marker::PhantomData;
+use std::sync::Arc;
+use crate::actor::Context;
+use crate::persistence::errors::RecoveryError;
 use crate::persistence::actor::PersistenceActor;
+use crate::persistence::{Event, RecoverJournal, RecoverSnapShot, SnapShot};
 
-pub struct Recovery<A: PersistenceActor> {
-    snapshot: 
+
+
+pub struct Fixture<A: PersistenceActor> {
+    _mark: PhantomData<A>,
+}
+
+
+pub struct FixtureParts<A: PersistenceActor> {
+    bytes: Vec<u8>,
+    refs: Arc<dyn Handler<A>>
+}
+
+impl<A: PersistenceActor> FixtureParts<A> {
+    pub async fn apply(self, actor: &mut A, ctx: &mut Context) -> Result<(), RecoveryError> {
+        self.refs.apply(actor, self.bytes, ctx).await
+    }
+}
+
+#[async_trait::async_trait]
+pub(crate) trait Handler<A: PersistenceActor>: 'static + Sync + Send {
+    async fn apply(&self, actor: &mut A, payload: Vec<u8>, ctx: &mut Context) -> Result<(), RecoveryError>;
+}
+
+
+pub struct SnapShotResolver<A: PersistenceActor, S: SnapShot> {
+    _actor: PhantomData<A>,
+    _snapshot: PhantomData<S>
+}
+
+pub struct EventResolver<A: PersistenceActor, E: Event> {
+    _actor: PhantomData<A>,
+    _event: PhantomData<E>
+}
+
+#[async_trait::async_trait]
+impl<A: PersistenceActor, S: SnapShot> Handler<A> for SnapShotResolver<A, S> 
+    where A: RecoverSnapShot<S>
+{
+    async fn apply(&self, actor: &mut A, payload: Vec<u8>, ctx: &mut Context) -> Result<(), RecoveryError> {
+        let decode = S::from_bytes(&payload)?;
+        actor.recover_snapshot(decode, ctx).await;
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl<A: PersistenceActor, E: Event> Handler<A> for EventResolver<A, E> 
+    where A: RecoverJournal<E>
+{
+    async fn apply(&self, actor: &mut A, payload: Vec<u8>, ctx: &mut Context) -> Result<(), RecoveryError> {
+        let decode = E::from_bytes(&payload)?;
+        actor.recover_journal(decode, ctx).await;
+        Ok(())
+    }
 }

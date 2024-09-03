@@ -5,7 +5,7 @@ use crate::persistence::extension::SnapShotProtocol;
 use crate::persistence::identifier::PersistenceId;
 use crate::persistence::journal::{Event, RecoverJournal};
 use crate::persistence::JournalProtocol;
-use crate::persistence::recovery::Recovery;
+use crate::persistence::recovery::Fixture;
 use crate::persistence::snapshot::{RecoverSnapShot, SnapShot};
 
 #[async_trait::async_trait]
@@ -55,7 +55,7 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
         Ok(())
     }
     
-    async fn recover(&mut self, id: &PersistenceId, ctx: &mut Context) -> Recovery<Self> {
+    async fn recover(&mut self, id: &PersistenceId, ctx: &mut Context) -> Fixture<Self> {
         todo!()
     }
 }

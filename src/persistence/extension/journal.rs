@@ -5,6 +5,7 @@ use crate::actor::{Context, FromContext};
 use crate::persistence::{Batch, Event};
 use crate::persistence::errors::{DeserializeError, PersistError};
 use crate::persistence::identifier::SequenceId;
+use crate::system::ExtensionMissingError;
 
 #[async_trait::async_trait]
 pub trait JournalProvider: 'static + Sync + Send {
@@ -72,12 +73,14 @@ impl SelectionCriteria {
 
 #[async_trait::async_trait]
 impl FromContext for JournalProtocol {
-    type Rejection = PersistError;
+    type Rejection = ExtensionMissingError;
     async fn from_context(ctx: &mut Context) -> Result<Self, Self::Rejection> {
         ctx.system()
             .ext
             .get::<JournalProtocol>()
-            .ok_or(PersistError::Missing)
+            .ok_or(ExtensionMissingError {
+                module: "JournalProtocol"
+            })
             .cloned()
     }
 }

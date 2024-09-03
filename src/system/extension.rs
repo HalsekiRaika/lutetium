@@ -1,5 +1,7 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 
 #[derive(Default)]
 pub struct Extensions {
@@ -28,3 +30,17 @@ impl Extensions {
             .and_then(|boxed| boxed.downcast_mut())
     }
 }
+
+
+#[derive(Debug)]
+pub struct ExtensionMissingError {
+    pub module: &'static str,
+}
+
+impl Display for ExtensionMissingError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "extension = `{}` does not installed in ActorSystem.", self.module)
+    }
+}
+
+impl Error for ExtensionMissingError {}
