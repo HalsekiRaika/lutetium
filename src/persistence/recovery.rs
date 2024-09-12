@@ -18,6 +18,10 @@ pub struct FixtureParts<A: PersistenceActor> {
 }
 
 impl<A: PersistenceActor> FixtureParts<A> {
+    pub fn from_snapshot<S: SnapShot>(bytes: Vec<u8>) -> FixtureParts<A> where A: RecoverSnapShot<S> {
+        Self { bytes, refs: Arc::new(SnapShotResolver::<A, S>::default()) }
+    }
+    
     pub async fn apply(self, actor: &mut A, ctx: &mut Context) -> Result<(), RecoveryError> {
         self.refs.apply(actor, self.bytes, ctx).await
     }
@@ -37,6 +41,18 @@ pub struct SnapShotResolver<A: PersistenceActor, S: SnapShot> {
 pub struct EventResolver<A: PersistenceActor, E: Event> {
     _actor: PhantomData<A>,
     _event: PhantomData<E>
+}
+
+impl<A: PersistenceActor, S: SnapShot> Default for SnapShotResolver<A, S> {
+    fn default() -> Self {
+        Self { _actor: PhantomData, _snapshot: PhantomData }
+    }
+}
+
+impl<A: PersistenceActor, E: Event> Default for EventResolver<A, E> {
+    fn default() -> Self {
+        Self { _actor: PhantomData, _event: PhantomData }
+    }
 }
 
 #[async_trait::async_trait]

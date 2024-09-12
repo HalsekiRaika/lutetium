@@ -2,9 +2,12 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
-use crate::actor::Context;
-use crate::persistence::errors::{DeserializeError, SerializeError};
-use crate::persistence::identifier::SequenceId;
+use crate::actor::{Context, FromContext};
+use crate::persistence::actor::PersistenceActor;
+use crate::persistence::errors::{DeserializeError, RecoveryError, SerializeError};
+use crate::persistence::identifier::{PersistenceId, SequenceId};
+use crate::persistence::JournalProtocol;
+use crate::persistence::recovery::FixtureParts;
 
 pub trait Event: 'static + Sync + Send + Sized
     where Self: Serialize + DeserializeOwned
@@ -51,5 +54,16 @@ impl<E: Event> Batch<E> {
 impl<E: Event> Default for Batch<E> {
     fn default() -> Self {
         Self(BTreeMap::default())
+    }
+}
+
+
+pub struct FixtureEvent<A: PersistenceActor>(Option<FixtureParts<A>>);
+
+impl<A: PersistenceActor> FixtureEvent<A> {
+    pub async fn from_id_with_context(id: &PersistenceId, ctx: &mut Context) -> Result<Self, RecoveryError> {
+        let journal = JournalProtocol::from_context(ctx).await?;
+        
+        todo!()
     }
 }

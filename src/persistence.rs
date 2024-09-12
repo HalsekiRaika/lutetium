@@ -5,6 +5,7 @@ mod extension;
 mod snapshot;
 mod journal;
 mod recovery;
+mod mapping;
 
 pub use self::{
     extension::*,
