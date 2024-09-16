@@ -6,9 +6,11 @@ mod snapshot;
 mod journal;
 mod recovery;
 mod mapping;
+mod selector;
 
 pub use self::{
     extension::*,
     snapshot::*,
     journal::*,
+    selector::*,
 };
