@@ -8,9 +8,9 @@ use crate::system::ExtensionMissingError;
 
 #[async_trait::async_trait]
 pub trait SnapShotProvider: 'static + Sync + Send {
-    async fn insert(&self, id: &PersistenceId, bin: Vec<u8>) -> Result<(), PersistError>;
-    async fn select(&self, id: &PersistenceId) -> Result<Option<Vec<u8>>, PersistError>;
-    async fn delete(&self, id: &PersistenceId) -> Result<Vec<u8>, PersistError>;
+    async fn insert(&self, id: &PersistenceId, payload: SnapShotPayload) -> Result<(), PersistError>;
+    async fn select(&self, id: &PersistenceId) -> Result<Option<SnapShotPayload>, PersistError>;
+    async fn delete(&self, id: &PersistenceId) -> Result<SnapShotPayload, PersistError>;
 }
 
 pub struct SnapShotProtocol(Arc<dyn SnapShotProvider>);
@@ -22,27 +22,48 @@ impl SnapShotProtocol {
 
 
     pub async fn insert<S: SnapShot>(&self, id: &PersistenceId, snapshot: &S) -> Result<(), PersistError> {
-        self.0.insert(id, snapshot.as_bytes()?).await
+        let payload = SnapShotPayload {
+            id: id.clone(),
+            key: S::REGISTRY_KEY,
+            bytes: snapshot.as_bytes()?,
+        };
+        self.0.insert(id, payload).await
     }
 
-    pub async fn select<S: SnapShot>(&self, id: &PersistenceId) -> Result<Option<S>, PersistError> {
-        let bin = self.0.select(id).await?;
-        Ok(bin.map(|bytes| S::from_bytes(&bytes)).transpose()?)
+    pub async fn select(&self, id: &PersistenceId) -> Result<Option<SnapShotPayload>, PersistError> {
+        self.0.select(id).await
     }
 
-    pub async fn delete<S: SnapShot>(&self, id: &PersistenceId) -> Result<S, PersistError> {
-        let bin = self.0.delete(id).await?;
-        Ok(S::from_bytes(&bin)?)
-    }
-    
-    pub async fn select_raw(&self, id: &PersistenceId) -> Result<Option<Vec<u8>>, PersistError> {
-        Ok(self.0.select(id).await?)
+    pub async fn delete(&self, id: &PersistenceId) -> Result<SnapShotPayload, PersistError> {
+        self.0.delete(id).await
     }
 }
 
 impl Clone for SnapShotProtocol {
     fn clone(&self) -> Self {
         Self(Arc::clone(&self.0))
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct SnapShotPayload {
+    id: PersistenceId,
+    key: &'static str,
+    pub(crate) bytes: Vec<u8>
+}
+
+impl SnapShotPayload {
+    pub fn id(&self) -> &PersistenceId {
+        &self.id
+    }
+    
+    pub fn key(&self) -> &'static str {
+        self.key
+    }
+    
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
     }
 }
 
@@ -53,7 +74,7 @@ impl FromContext for SnapShotProtocol {
         ctx.system()
             .ext
             .get::<SnapShotProtocol>()
-            .ok_or_else(|| ExtensionMissingError {
+            .ok_or(ExtensionMissingError {
                 module: "SnapShotProtocol"
             })
             .cloned()

@@ -1,31 +1,9 @@
 use std::marker::PhantomData;
-use std::sync::Arc;
+
 use crate::actor::Context;
 use crate::persistence::errors::RecoveryError;
 use crate::persistence::actor::PersistenceActor;
 use crate::persistence::{Event, RecoverJournal, RecoverSnapShot, SnapShot};
-
-
-
-pub struct Fixture<A: PersistenceActor> {
-    _mark: PhantomData<A>,
-}
-
-
-pub struct FixtureParts<A: PersistenceActor> {
-    bytes: Vec<u8>,
-    refs: Arc<dyn Handler<A>>
-}
-
-impl<A: PersistenceActor> FixtureParts<A> {
-    pub fn from_snapshot<S: SnapShot>(bytes: Vec<u8>) -> FixtureParts<A> where A: RecoverSnapShot<S> {
-        Self { bytes, refs: Arc::new(SnapShotResolver::<A, S>::default()) }
-    }
-    
-    pub async fn apply(self, actor: &mut A, ctx: &mut Context) -> Result<(), RecoveryError> {
-        self.refs.apply(actor, self.bytes, ctx).await
-    }
-}
 
 #[async_trait::async_trait]
 pub(crate) trait Handler<A: PersistenceActor>: 'static + Sync + Send {

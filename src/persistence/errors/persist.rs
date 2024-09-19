@@ -18,3 +18,8 @@ pub enum PersistError {
     Serialization(Box<dyn std::error::Error + Sync + Send>)
 }
 
+impl From<ExtensionMissingError> for PersistError {
+    fn from(value: ExtensionMissingError) -> Self {
+        Self::MissingExtension(value)
+    }
+}

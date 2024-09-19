@@ -9,10 +9,11 @@ use uuid::Uuid;
 
 use lutetium::actor::{Context, Handler, Message};
 use lutetium::actor::refs::{DynRef, RegularAction};
-use lutetium::persistence::{Event, SnapShotProvider, RecoverJournal, RecoverSnapShot, SnapShot, SnapShotProtocol};
+use lutetium::persistence::{Event, SnapShotProvider, RecoverJournal, RecoverSnapShot, SnapShot, SnapShotProtocol, SnapShotPayload};
 use lutetium::persistence::actor::PersistenceActor;
 use lutetium::persistence::errors::{DeserializeError, PersistError, SerializeError};
 use lutetium::persistence::identifier::{PersistenceId, ToPersistenceId};
+use lutetium::persistence::mapping::{RecoverMapping, RecoveryMapping};
 use lutetium::system::ActorSystem;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -37,6 +38,9 @@ pub enum MyEvent {
 }
 
 impl Event for MyEvent {
+    const REGISTRY_KEY: &'static str = "my-actor-event";
+
+
     fn as_bytes(&self) -> Result<Vec<u8>, SerializeError> {
         Ok(flexbuffers::to_vec(self)?)
     }
@@ -47,6 +51,9 @@ impl Event for MyEvent {
 }
 
 impl SnapShot for MyActor {
+    const REGISTRY_KEY: &'static str = "my-actor-snapshot";
+
+
     fn as_bytes(&self) -> Result<Vec<u8>, SerializeError> {
         Ok(flexbuffers::to_vec(self)?)
     }
@@ -83,6 +90,14 @@ impl PersistenceActor for MyActor {
     }
 }
 
+impl RecoveryMapping for MyActor {
+    fn mapping(mapping: &mut RecoverMapping<Self>) {
+        mapping
+            .reg_snapshot::<Self>()
+            .reg_event::<MyEvent>();
+    }
+}
+
 #[async_trait::async_trait]
 impl Handler<MyCommand> for MyActor {
     type Accept = MyEvent;
@@ -101,7 +116,10 @@ impl Handler<MyCommand> for MyActor {
         };
         
         self.snapshot(self, _ctx).await
-            .map_err(|_e| MyError::Persist)?;
+            .map_err(|e| MyError::Persist(anyhow::Error::new(e)))?;
+        
+        // self.persist(&ev, _ctx).await
+        //     .map_err(|e| MyError::Persist(anyhow::Error::new(e)))?;
         
         Ok(ev)
     }
@@ -109,12 +127,12 @@ impl Handler<MyCommand> for MyActor {
 
 #[derive(Debug, thiserror::Error)]
 pub enum MyError {
-    #[error("no context")]
-    Persist
+    #[error(transparent)]
+    Persist(anyhow::Error)
 }
 
 pub struct InMemoryDataBase {
-    db: Arc<RwLock<HashMap<PersistenceId, Vec<u8>>>>
+    db: Arc<RwLock<HashMap<PersistenceId, SnapShotPayload>>>
 }
 
 impl Clone for InMemoryDataBase {
@@ -131,20 +149,19 @@ impl Default for InMemoryDataBase {
 
 #[async_trait::async_trait]
 impl SnapShotProvider for InMemoryDataBase {
-    async fn insert(&self, id: &PersistenceId, bin: Vec<u8>) -> Result<(), PersistError> {
-        self.db.write().await.insert(id.to_owned(), bin);
+    async fn insert(&self, id: &PersistenceId, payload: SnapShotPayload) -> Result<(), PersistError> {
+        self.db.write().await.insert(id.to_owned(), payload);
         Ok(())
     }
 
-    async fn select(&self, id: &PersistenceId) -> Result<Vec<u8>, PersistError> {
+    async fn select(&self, id: &PersistenceId) -> Result<Option<SnapShotPayload>, PersistError> {
         let bin = self.db.read().await
             .get(id)
-            .ok_or(PersistError::NotFound { id: id.to_owned() })?
-            .to_owned();
+            .cloned();
         Ok(bin)
     }
 
-    async fn delete(&self, id: &PersistenceId) -> Result<Vec<u8>, PersistError> {
+    async fn delete(&self, id: &PersistenceId) -> Result<SnapShotPayload, PersistError> {
         let bin = self.db.write().await
             .remove(id)
             .ok_or(PersistError::NotFound { id: id.to_owned() })?;
