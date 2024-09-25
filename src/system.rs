@@ -30,6 +30,11 @@ impl ActorSystem {
         Ok(registered)
     }
     
+    pub async fn try_spawn<T: TryIntoActor>(&self, id: T::Identifier, into: T) -> Result<Result<ActorRef<T::Actor>, ActorError>, T::Rejection> {
+        let (id, actor) = into.try_into_actor(id)?;
+        Ok(self.spawn(id, actor).await)
+    }
+    
     pub async fn shutdown(&self, id: impl ToActorId) -> Result<(), ActorError> {
         self.registry
             .deregister(&id.to_actor_id())

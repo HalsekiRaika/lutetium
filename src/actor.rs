@@ -37,8 +37,9 @@ pub trait IntoActor: 'static + Sync + Send + Sized {
     fn into_actor(self) -> Self::Actor;
 }
 
-#[async_trait::async_trait]
-pub trait Prepare<M: Message>: Actor {
+pub trait TryIntoActor: 'static + Sync + Send + Sized {
     type Identifier: IntoActorId;
-    async fn prepare(msg: M) -> Result<(Self::Identifier, Self), ActorError>;
+    type Actor: Actor;
+    type Rejection;
+    fn try_into_actor(self, id: Self::Identifier) -> Result<(Self::Identifier, Self::Actor), Self::Rejection>;
 }

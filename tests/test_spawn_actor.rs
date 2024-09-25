@@ -7,7 +7,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use uuid::Uuid;
 
-use lutetium::actor::{Actor, Context, Handler, Message, Prepare};
+use lutetium::actor::{Actor, Context, Handler, Message, TryIntoActor};
 use lutetium::actor::refs::{ActorRef, DynRef, ErrorFlattenAction};
 use lutetium::errors::ActorError;
 use lutetium::identifier::IntoActorId;
@@ -49,20 +49,14 @@ pub enum PersonEvent {
 
 impl Actor for Person {}
 
-#[async_trait]
-impl Prepare<PersonCommand> for Person {
+impl TryIntoActor for PersonCommand {
     type Identifier = PersonId;
-    async fn prepare(msg: PersonCommand) -> Result<(Self::Identifier, Self), ActorError> {
-        if let PersonCommand::Spawn = msg {
-            let id = PersonId::default();
-            let p = Person {
-                id,
-                name: "RechellaTek".to_string(),
-                age: 21,
-            };
-            return Ok((id, p))
-        };
-        Err(ActorError::NotEnoughValue)
+    type Actor = Person;
+    type Rejection = anyhow::Error;
+
+    fn try_into_actor(self, id: Self::Identifier) -> Result<(Self::Identifier, Self::Actor), Self::Rejection> {
+        let person = Person { id, name: "into man".to_string(), age: 0, };
+        Ok((id, person))
     }
 }
 
@@ -75,9 +69,8 @@ impl Handler<PersonCommand> for Person {
     async fn call(&mut self, msg: PersonCommand, _ctx: &mut Context) -> Result<Self::Accept, Self::Rejection> {
         match msg {
             PersonCommand::IncrementAge => {
-                
                 self.age += 1;
-                
+                tracing::debug!("person was old {}", self.age);
                 Ok(PersonEvent::IncrementedAge)
             },
             _ => unreachable!()
@@ -126,7 +119,8 @@ async fn prepare_spawn() -> anyhow::Result<()> {
     
     let system = ActorSystem::builder().build();
     
-    let refs: ActorRef<Person> = system.spawn_from(PersonCommand::Spawn).await?;
+    let id = PersonId::default();
+    let refs: ActorRef<Person> = system.try_spawn(id, PersonCommand::Spawn).await??;
     
     let event = refs.ask(PersonCommand::IncrementAge).await?;
     
