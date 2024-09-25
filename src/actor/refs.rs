@@ -164,7 +164,7 @@ pub trait DynRef: Any {
     fn as_any(&self) -> &dyn Any;
 }
 
-pub(crate) struct AnyRef(Arc<dyn DynRef + Sync + Send>);
+pub struct AnyRef(Arc<dyn DynRef + Sync + Send>);
 
 impl AnyRef {
     pub fn downcast<A: Actor>(self) -> Result<ActorRef<A>, ActorError> {
