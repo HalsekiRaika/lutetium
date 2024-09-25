@@ -71,7 +71,7 @@ impl FromContext for JournalProtocol {
     type Rejection = ExtensionMissingError;
     async fn from_context(ctx: &mut Context) -> Result<Self, Self::Rejection> {
         ctx.system()
-            .ext
+            .extension()
             .get::<JournalProtocol>()
             .ok_or(ExtensionMissingError {
                 module: "JournalProtocol"

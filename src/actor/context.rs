@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use crate::actor::{RunningState, State};
-use crate::system::{Root, SupervisorRef, System};
+use crate::system::ActorSystem;
 
 
 /// A structure representing the current state of the managed Actor.
@@ -9,46 +7,27 @@ use crate::system::{Root, SupervisorRef, System};
 /// Since each Actor is unique, [`Clone`] is not implemented because it can be very confusing.
 /// Instead, [Context::inherit] is defined to create a Context while inheriting a reference to ActorSystem and a reference to Supervisor.
 pub struct Context {
-    root: Root,
-    system: Arc<System>,
-    running: RunningState,
+    system: ActorSystem,
+    state: RunningState
 }
 
 impl Context {
-    pub(crate) fn new(system: Arc<System>, root: SupervisorRef) -> Context {
-        Self {
-            root: Root::inherit(root),
-            system,
-            running: RunningState::default(),
-        }
-    }
-    
-    pub(crate) fn inherit(&self) -> Context {
-        Self {
-            root: self.root.clone(),
-            system: self.system.clone(),
-            running: RunningState::default()
-        }
+    pub fn track_with_system(system: ActorSystem) -> Self {
+        Self { system, state: RunningState::default() }
     }
 }
 
 impl Context {
     pub fn shutdown(&mut self) {
-        self.running.switch(|prev| { *prev = State::Shutdown });
+        self.state.switch(|prev| { *prev = State::Shutdown });
     }
-}
 
-impl Context {
-    pub fn system(&self) -> Arc<System> {
-        Arc::clone(&self.system)
+    pub fn state(&self) -> &RunningState {
+        &self.state
     }
     
-    pub fn root(&self) -> Root {
-        self.root.clone()
-    }
-    
-    pub(crate) fn running_state(&self) -> &RunningState {
-        &self.running
+    pub fn system(&self) -> &ActorSystem {
+        &self.system
     }
 }
 

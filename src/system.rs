@@ -1,71 +1,122 @@
-use std::ops::Deref;
-use std::sync::Arc;
-use crate::actor::Context;
-
-pub use self::extension::*;
-pub use self::root::*;
-pub use self::supervisor::*;
-
 mod extension;
-mod root;
-mod supervisor;
+mod lifecycle;
+mod registry;
+
+pub use self::{
+    extension::*,
+    lifecycle::*,
+    registry::*,
+};
+
+use std::sync::Arc;
+use std::future::Future;
+
+use crate::actor::refs::ActorRef;
+use crate::actor::{Actor, Context, TryIntoActor};
+use crate::errors::ActorError;
+use crate::identifier::{IntoActorId, ToActorId};
 
 pub struct ActorSystem {
-    pub(crate) root: Root,
-    pub(crate) system: Arc<System> 
+    ext: Arc<Extensions>,
+    registry: Registry
 }
 
-impl Clone for ActorSystem {
-    fn clone(&self) -> Self {
-        Self {
-            root: self.root.clone(),
-            system: Arc::clone(&self.system)
+impl ActorSystem {
+    pub async fn spawn<A: Actor>(&self, id: impl IntoActorId, actor: A) -> Result<ActorRef<A>, ActorError> {
+        let behavior = Factory::create(actor, self.clone());
+        let registered = self.registry
+            .register(id.into_actor_id(), behavior)
+            .await?;
+        Ok(registered)
+    }
+    
+    pub async fn shutdown(&self, id: impl ToActorId) -> Result<(), ActorError> {
+        self.registry
+            .deregister(&id.to_actor_id())
+            .await
+    }
+    
+    pub async fn shutdown_all(&self) -> Result<(), ActorError> {
+        self.registry
+            .shutdown_all()
+            .await
+    }
+    
+    pub async fn find<A: Actor>(&self, id: impl ToActorId) -> Result<ActorRef<A>, ActorError> {
+        let id = id.to_actor_id();
+        let Some((_, actor)) = self.registry.find(&id).await else {
+            return Err(ActorError::NotFoundActor { id })
+        };
+        let refs = actor.downcast::<A>()?;
+        Ok(refs)
+    }
+    
+    pub async fn find_or<A: Actor, I: ToActorId, Fut>(&self, id: I, or_nothing: impl FnOnce(I) -> Fut) -> Result<ActorRef<A>, ActorError> 
+        where Fut: Future<Output = A> + 'static + Sync + Send
+    {
+        let i = id.to_actor_id();
+        match self.registry.find(&i).await {
+            Some((_, actor)) => {
+                actor.downcast::<A>()
+            },
+            None => {
+                let actor = or_nothing(id).await;
+                self.spawn(i, actor).await
+            }
         }
     }
 }
 
 impl ActorSystem {
-    pub fn builder() -> System {
-        System::default()
-    }
-    
-    pub fn root_context(&self) -> Context {
-        Context::new(self.system.clone(), self.root.clone().into())
-    }
-}
-
-impl Deref for ActorSystem {
-    type Target = SupervisorRef;
-    fn deref(&self) -> &Self::Target {
-        &self.root
-    }
-}
-
-
-pub struct System {
-    pub(crate) ext: Extensions
-}
-
-impl System {
-    pub fn extension(&mut self, f: impl FnOnce(&mut Extensions)) {
-        f(&mut self.ext)
-    }
-    
-    pub fn build(self) -> ActorSystem {
-        let system = Arc::new(self);
-        let root = Supervisor::new();
-        ActorSystem {
-            root: Root::new(root, Arc::clone(&system)),
-            system
+    pub fn builder() -> SystemBuilder {
+        SystemBuilder {
+            ext: Default::default(),
         }
     }
 }
 
-#[allow(clippy::derivable_impls)]
-impl Default for System {
-    fn default() -> Self {
-        Self {
-            ext: Extensions::default()
+impl ActorSystem {
+    pub fn extension(&self) -> &Arc<Extensions> {
+        &self.ext
+    }
+}
+
+impl Clone for ActorSystem {
+    fn clone(&self) -> Self {
+        Self { 
+            ext: Arc::clone(&self.ext),
+            registry: self.registry.clone(),
+        }
+    }
+}
+
+pub(crate) struct Factory;
+
+impl Factory {
+    pub fn create<A: Actor>(actor: A, system: ActorSystem) -> Behavior<A> {
+        Behavior { actor, ctx: Context::track_with_system(system) }
+    }
+}
+
+pub struct Behavior<A: Actor> {
+    actor: A,
+    ctx: Context
+}
+
+pub struct SystemBuilder {
+    ext: Extensions
+}
+
+impl SystemBuilder {
+    pub fn extension(&mut self, procedure: impl FnOnce(&mut Extensions)) -> &mut Self {
+        procedure(&mut self.ext);
+        self
+    }
+    
+    pub fn build(self) -> ActorSystem {
+        ActorSystem {
+            ext: Arc::new(self.ext),
+            registry: Registry::default(),
         }
     }
 }

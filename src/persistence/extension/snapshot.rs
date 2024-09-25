@@ -72,7 +72,7 @@ impl FromContext for SnapShotProtocol {
     type Rejection = ExtensionMissingError;
     async fn from_context(ctx: &mut Context) -> Result<Self, Self::Rejection> {
         ctx.system()
-            .ext
+            .extension()
             .get::<SnapShotProtocol>()
             .ok_or(ExtensionMissingError {
                 module: "SnapShotProtocol"

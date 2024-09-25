@@ -14,7 +14,7 @@ impl<T> FromContext for Extension<T>
     async fn from_context(ctx: &mut Context) -> Result<Self, Self::Rejection> {
         let ext = ctx
             .system()
-            .ext
+            .extension()
             .get::<T>()
             .ok_or_else(|| ActorError::MissingExtension(ExtensionMissingError {
                 module: type_name::<T>()
