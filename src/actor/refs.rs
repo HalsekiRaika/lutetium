@@ -12,7 +12,7 @@ mod action;
 pub use self::action::*;
 
 pub struct ActorRef<A: Actor> {
-    pub(crate) ctx: Arc<RefContext<A>>,
+    pub(crate) channel: Arc<RefContext<A>>,
 }
 
 #[async_trait::async_trait]
@@ -29,7 +29,7 @@ impl<A: Actor> DynRef for ActorRef<A> {
 impl<A: Actor> Clone for ActorRef<A> {
     fn clone(&self) -> Self {
         Self {
-            ctx: Arc::clone(&self.ctx),
+            channel: Arc::clone(&self.channel),
         }
     }
 }
@@ -41,7 +41,7 @@ pub(crate) struct RefContext<A> {
 impl<A: Actor> ActorRef<A> {
     pub(crate) fn new(sender: UnboundedSender<Box<dyn Applier<A>>>) -> ActorRef<A> {
         Self {
-            ctx: Arc::new(RefContext { sender }),
+            channel: Arc::new(RefContext { sender }),
         }
     }
 }
@@ -55,7 +55,7 @@ impl<A: Actor> RegularAction<A> for ActorRef<A> {
             A: Handler<M>,
     {
         let (tx, rx) = oneshot::channel();
-        let Ok(_) = self.ctx.sender.send(Box::new(Callback {
+        let Ok(_) = self.channel.sender.send(Box::new(Callback {
             message: msg,
             oneshot: tx,
         })) else {
@@ -73,7 +73,7 @@ impl<A: Actor> RegularAction<A> for ActorRef<A> {
             A: Handler<M>,
     {
         let (tx, rx) = oneshot::channel();
-        let Ok(_) = self.ctx.sender.send(Box::new(Void {
+        let Ok(_) = self.channel.sender.send(Box::new(Void {
             message: msg,
             oneshot: tx,
         })) else {
