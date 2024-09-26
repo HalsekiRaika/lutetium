@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
-use crate::actor::{Context, FromContext};
+use crate::actor::{ActorContext, FromContext};
+use crate::persistence::context::PersistContext;
 use crate::persistence::errors::PersistError;
-use crate::persistence::identifier::PersistenceId;
+use crate::persistence::identifier::{PersistenceId, SequenceId};
 use crate::persistence::SnapShot;
 use crate::system::ExtensionMissingError;
 
 #[async_trait::async_trait]
 pub trait SnapShotProvider: 'static + Sync + Send {
-    async fn insert(&self, id: &PersistenceId, payload: SnapShotPayload) -> Result<(), PersistError>;
-    async fn select(&self, id: &PersistenceId) -> Result<Option<SnapShotPayload>, PersistError>;
-    async fn delete(&self, id: &PersistenceId) -> Result<SnapShotPayload, PersistError>;
+    async fn insert(&self, id: &PersistenceId, seq: &SequenceId, payload: SnapShotPayload) -> Result<(), PersistError>;
+    async fn select(&self, id: &PersistenceId, seq: &SequenceId) -> Result<Option<SnapShotPayload>, PersistError>;
 }
 
 pub struct SnapShotProtocol(Arc<dyn SnapShotProvider>);
@@ -21,21 +21,22 @@ impl SnapShotProtocol {
     }
 
 
-    pub async fn insert<S: SnapShot>(&self, id: &PersistenceId, snapshot: &S) -> Result<(), PersistError> {
+    pub async fn insert<S: SnapShot>(&self, id: &PersistenceId, seq: SequenceId, snapshot: &S) -> Result<(), PersistError> {
         let payload = SnapShotPayload {
             id: id.clone(),
             key: S::REGISTRY_KEY,
+            seq,
             bytes: snapshot.as_bytes()?,
         };
-        self.0.insert(id, payload).await
+        self.0.insert(id, &seq, payload).await
     }
 
-    pub async fn select(&self, id: &PersistenceId) -> Result<Option<SnapShotPayload>, PersistError> {
-        self.0.select(id).await
+    pub async fn read(&self, id: &PersistenceId, seq: &SequenceId) -> Result<Option<SnapShotPayload>, PersistError> {
+        self.0.select(id, seq).await
     }
 
-    pub async fn delete(&self, id: &PersistenceId) -> Result<SnapShotPayload, PersistError> {
-        self.0.delete(id).await
+    pub async fn read_latest(&self, id: &PersistenceId) -> Result<Option<SnapShotPayload>, PersistError> {
+        self.0.select(id, &SequenceId::max()).await
     }
 }
 
@@ -48,9 +49,10 @@ impl Clone for SnapShotProtocol {
 
 #[derive(Debug, Clone)]
 pub struct SnapShotPayload {
-    id: PersistenceId,
-    key: &'static str,
-    pub(crate) bytes: Vec<u8>
+    pub id: PersistenceId,
+    pub key: &'static str,
+    pub seq: SequenceId,
+    pub bytes: Vec<u8>
 }
 
 impl SnapShotPayload {
@@ -68,9 +70,9 @@ impl SnapShotPayload {
 }
 
 #[async_trait::async_trait]
-impl FromContext for SnapShotProtocol {
+impl FromContext<PersistContext> for SnapShotProtocol {
     type Rejection = ExtensionMissingError;
-    async fn from_context(ctx: &mut Context) -> Result<Self, Self::Rejection> {
+    async fn from_context(ctx: &mut PersistContext) -> Result<Self, Self::Rejection> {
         ctx.system()
             .extension()
             .get::<SnapShotProtocol>()

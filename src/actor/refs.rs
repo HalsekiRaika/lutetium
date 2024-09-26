@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::oneshot;
 
-use crate::actor::{Actor, Context, Handler, Message, Terminate};
+use crate::actor::{Actor, Handler, Message, Terminate};
 use crate::errors::ActorError;
 
 mod action;
@@ -107,7 +107,7 @@ impl<A: Actor> ErrorFlattenAction<A> for ActorRef<A> {
 
 #[async_trait::async_trait]
 pub(crate) trait Applier<A: Actor>: 'static + Sync + Send {
-    async fn apply(self: Box<Self>, actor: &mut A, ctx: &mut Context) -> Result<(), ActorError>;
+    async fn apply(self: Box<Self>, actor: &mut A, ctx: &mut A::Context) -> Result<(), ActorError>;
 }
 
 pub(crate) struct Callback<A: Actor, M: Message>
@@ -123,7 +123,7 @@ impl<A: Actor, M: Message> Applier<A> for Callback<A, M>
 where
     A: Handler<M>,
 {
-    async fn apply(self: Box<Self>, actor: &mut A, ctx: &mut Context) -> Result<(), ActorError> {
+    async fn apply(self: Box<Self>, actor: &mut A, ctx: &mut A::Context) -> Result<(), ActorError> {
         Ok(self
             .oneshot
             .send(actor.call(self.message, ctx).await)
@@ -144,7 +144,7 @@ impl<A: Actor, M: Message> Applier<A> for Void<A, M>
 where
     A: Handler<M>,
 {
-    async fn apply(self: Box<Self>, actor: &mut A, ctx: &mut Context) -> Result<(), ActorError> {
+    async fn apply(self: Box<Self>, actor: &mut A, ctx: &mut A::Context) -> Result<(), ActorError> {
         match actor.call(self.message, ctx).await {
             Ok(_) => self
                 .oneshot

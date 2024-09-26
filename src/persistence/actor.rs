@@ -1,8 +1,8 @@
-use crate::actor::{Actor, Context, FromContext};
+use crate::actor::{Actor, FromContext};
 use crate::errors::ActorError;
-use crate::persistence::JournalProtocol;
+use crate::persistence::context::PersistContext;
 use crate::persistence::errors::{PersistError, RecoveryError};
-use crate::persistence::extension::SnapShotProtocol;
+use crate::persistence::extension::{JournalProtocol, SnapShotProtocol};
 use crate::persistence::fixture::{Fixable, Fixture, FixtureJournal, FixtureSnapShot, Range};
 use crate::persistence::identifier::PersistenceId;
 use crate::persistence::journal::{Event, RecoverJournal};
@@ -14,19 +14,19 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
     fn persistence_id(&self) -> PersistenceId;
     
     #[allow(unused_variables)]
-    async fn pre_recovery(&mut self, ctx: &mut Context) -> Result<(), ActorError> { Ok(()) }
+    async fn pre_recovery(&mut self, ctx: &mut PersistContext) -> Result<(), ActorError> { Ok(()) }
     
     #[allow(unused_variables)]
-    async fn post_recovery(&mut self, ctx: &mut Context) -> Result<(), ActorError> { Ok(()) }
+    async fn post_recovery(&mut self, ctx: &mut PersistContext) -> Result<(), ActorError> { Ok(()) }
     
-    async fn persist<E: Event>(&self, event: &E, ctx: &mut Context) -> Result<(), PersistError> 
+    async fn persist<E: Event>(&self, event: &E, ctx: &mut PersistContext) -> Result<(), PersistError> 
         where Self: RecoverJournal<E> + RecoveryMapping,
     {
         let id = self.persistence_id();
         let journal = JournalProtocol::from_context(ctx).await?;
        
         let mut retry = 0;
-        while let Err(e) = journal.write_to_latest(&id, event).await {
+        while let Err(e) = journal.write_to_latest(&id, ctx.sequence().to_owned(), event).await {
             tracing::error!("{e}");
             retry += 1;
             
@@ -35,17 +35,19 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
             }
         }
         
+        ctx.mut_sequence().incr();
+        
         Ok(())
     }
     
-    async fn snapshot<S: SnapShot>(&self, snapshot: &S, ctx: &mut Context) -> Result<(), PersistError> 
+    async fn snapshot<S: SnapShot>(&self, snapshot: &S, ctx: &mut PersistContext) -> Result<(), PersistError> 
         where Self: RecoverSnapShot<S> + RecoveryMapping
     {
         let id = self.persistence_id();
         let store = SnapShotProtocol::from_context(ctx).await?;
 
         let mut retry = 0;
-        while let Err(e) = store.insert(&id, snapshot).await {
+        while let Err(e) = store.insert(&id, ctx.sequence().to_owned(), snapshot).await {
             tracing::error!("{}", e);
             retry += 1;
             
@@ -57,7 +59,7 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
         Ok(())
     }
     
-    async fn recover(&mut self, id: &PersistenceId, ctx: &mut Context) -> Result<Fixture<Self>, RecoveryError> 
+    async fn recover(&mut self, id: &PersistenceId, ctx: &mut PersistContext) -> Result<Fixture<Self>, RecoveryError> 
         where Self: RecoveryMapping
     {
         // Todo: To store Journal sequence values in Snapshot to reduce extra loading.
@@ -69,7 +71,9 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
 
 #[async_trait::async_trait]
 impl<A: RecoveryMapping> Actor for A {
-    async fn activate(&mut self, ctx: &mut Context) -> Result<(), ActorError> {
+    type Context = PersistContext;
+    
+    async fn activate(&mut self, ctx: &mut PersistContext) -> Result<(), ActorError> {
         self.pre_recovery(ctx).await?;
 
         let id = self.persistence_id();

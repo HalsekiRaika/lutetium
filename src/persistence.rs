@@ -2,15 +2,16 @@ pub mod actor;
 pub mod errors;
 pub mod identifier;
 pub mod mapping;
-mod extension;
+pub mod extension;
 mod snapshot;
 mod journal;
 mod recovery;
 mod selector;
 mod fixture;
+mod context;
 
 pub use self::{
-    extension::*,
+    context::*,
     snapshot::*,
     journal::*,
     selector::*,

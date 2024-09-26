@@ -8,11 +8,11 @@ pub use self::{
     registry::*,
 };
 
-use std::sync::Arc;
 use std::future::Future;
+use std::sync::Arc;
 
 use crate::actor::refs::ActorRef;
-use crate::actor::{Actor, Context, TryIntoActor};
+use crate::actor::{Actor, ActorContext, TryIntoActor};
 use crate::errors::ActorError;
 use crate::identifier::{IntoActorId, ToActorId};
 
@@ -99,13 +99,13 @@ pub(crate) struct Factory;
 
 impl Factory {
     pub fn create<A: Actor>(actor: A, system: ActorSystem) -> Behavior<A> {
-        Behavior { actor, ctx: Context::track_with_system(system) }
+        Behavior { actor, ctx: A::Context::track_with_system(system) }
     }
 }
 
 pub struct Behavior<A: Actor> {
     actor: A,
-    ctx: Context
+    ctx: A::Context
 }
 
 pub struct SystemBuilder {

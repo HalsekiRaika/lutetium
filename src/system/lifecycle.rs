@@ -1,4 +1,4 @@
-use crate::actor::Actor;
+use crate::actor::{Actor, ActorContext};
 use crate::actor::refs::{ActorRef, Applier};
 use crate::errors::ActorError;
 use crate::system::Behavior;

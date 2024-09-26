@@ -18,7 +18,8 @@ use crate::identifier::IntoActorId;
 
 #[async_trait::async_trait]
 pub trait Actor: 'static + Sync + Send + Sized {
-    async fn activate(&mut self, _ctx: &mut Context) -> Result<(), ActorError> {
+    type Context: ActorContext;
+    async fn activate(&mut self, _ctx: &mut Self::Context) -> Result<(), ActorError> {
         tracing::debug!(name: "actor", "activate");
         Ok(())
     }

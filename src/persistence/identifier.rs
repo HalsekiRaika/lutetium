@@ -1,7 +1,7 @@
+use crate::identifier::ActorId;
+use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
-use crate::identifier::ActorId;
 
 #[derive(Debug, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct PersistenceId(Arc<str>);
@@ -57,35 +57,45 @@ impl From<PersistenceId> for ActorId {
 }
 
 
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize)]
-pub struct SequenceId(Arc<i64>);
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize)]
+pub struct SequenceId(i64);
 
 impl SequenceId {
     pub fn new(seq: i64) -> SequenceId {
-        Self(Arc::new(seq))
+        Self(seq)
     }
     
     pub fn min() -> SequenceId {
-        Self(Arc::new(i64::MIN))
+        Self(i64::MIN)
     }
     
     pub fn max() -> SequenceId {
-        Self(Arc::new(i64::MAX))
+        Self(i64::MAX)
     }
     
-    pub async fn next(&self) -> SequenceId {
-        Self::new(*self.0 + 1)
+    pub fn incr(&mut self) {
+        self.0 += 1
+    }
+    
+    pub fn assign(&mut self, assign: SequenceId) {
+        self.0 = assign.0
     }
 }
 
 impl From<SequenceId> for i64 {
     fn from(value: SequenceId) -> Self {
-        *value.0
+        value.0
     }
 }
 
 impl AsRef<i64> for SequenceId {
     fn as_ref(&self) -> &i64 {
         &self.0
+    }
+}
+
+impl Default for SequenceId {
+    fn default() -> Self {
+        Self::new(0)
     }
 }

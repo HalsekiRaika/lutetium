@@ -1,4 +1,4 @@
-use crate::actor::Context;
+use crate::persistence::context::PersistContext;
 use crate::persistence::errors::{DeserializeError, SerializeError};
 
 pub trait SnapShot: 'static + Sync + Send + Sized {
@@ -9,5 +9,5 @@ pub trait SnapShot: 'static + Sync + Send + Sized {
 
 #[async_trait::async_trait]
 pub trait RecoverSnapShot<S: SnapShot = Self>: 'static + Sync + Send {
-    async fn recover_snapshot(&mut self, snapshot: S, ctx: &mut Context);
+    async fn recover_snapshot(&mut self, snapshot: S, ctx: &mut PersistContext);
 }
