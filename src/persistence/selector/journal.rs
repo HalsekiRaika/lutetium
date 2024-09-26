@@ -2,15 +2,13 @@ use std::fmt::{Display, Formatter};
 use crate::persistence::identifier::SequenceId;
 use crate::persistence::selector::error::SelectionError;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct SelectionCriteria {
     min: SequenceId,
     max: SequenceId,
 }
 
 impl SelectionCriteria {
-    pub const LATEST: SelectionCriteria = SelectionCriteria { min: SequenceId::MIN, max: SequenceId::MAX };
-    
     pub fn new(min: impl Into<i64>, max: impl Into<i64>) -> Result<SelectionCriteria, SelectionError> {
         let min = min.into();
         let max = max.into();
@@ -18,6 +16,10 @@ impl SelectionCriteria {
             return Err(SelectionError)
         }
         Ok(Self { min: SequenceId::new(min), max: SequenceId::new(max) })
+    }
+    
+    pub fn latest() -> SelectionCriteria {
+        Self { min: SequenceId::min(), max: SequenceId::max() }
     }
     
     pub fn matches(&self, seq: &SequenceId) -> bool {

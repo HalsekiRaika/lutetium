@@ -160,6 +160,11 @@ where
 
 #[async_trait::async_trait]
 pub trait DynRef: Any {
+    /// Shutdown the Actor.
+    /// 
+    /// **note**: This method only marks the shutdown and does not wait for completely. 
+    /// 
+    /// If you want a complete shutdown, use [`ActorSystem::shutdown`](crate::system::ActorSystem::shutdown).
     async fn shutdown(&self) -> Result<(), ActorError>;
     fn as_any(&self) -> &dyn Any;
 }

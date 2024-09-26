@@ -7,7 +7,6 @@ use crate::persistence::actor::PersistenceActor;
 use crate::persistence::recovery::{EventResolver, Handler, SnapShotResolver};
 use crate::persistence::{Event, RecoverJournal, RecoverSnapShot, SnapShot};
 
-
 pub trait RecoveryMapping: PersistenceActor {
     fn mapping(mapping: &mut RecoverMapping<Self>);
 }
@@ -91,6 +90,14 @@ impl<A: RecoveryMapping> RecoverMapping<A> {
     
     pub fn event(&self) -> &ResolveMapper<A> {
         &self.event
+    }
+
+    pub fn is_snapshot_map_empty(&self) -> bool {
+        self.snapshot.0.is_empty()
+    }
+    
+    pub fn is_event_map_empty(&self) -> bool {
+        self.event.0.is_empty()
     }
 }
 

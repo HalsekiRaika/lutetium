@@ -13,11 +13,19 @@ use crate::system::ExtensionMissingError;
 /// Trait that summarizes the database process for the [`PersistenceActor`](crate::persistence::actor::PersistenceActor) to store Events.
 /// 
 /// The data is **sequential** and assumes the use of IDs, such as `MySQL` using `AUTO_INCREMENT` for example.
-/// See [`SequenceId`](crate::persistence::identifier::SequenceId) for ID specifications.
+/// However, I don't expect it to be registered as a Primary Key. 
+/// It is only advisable to make adjustments against distribution, such as preparing a secondary index.
+/// 
+/// See [`SequenceId`](SequenceId) for ID specifications.
 #[async_trait::async_trait]
 pub trait JournalProvider: 'static + Sync + Send {
+    /// Assume the process of counting stored Events based on [`PersistenceId`](PersistenceId), 
+    /// but this can be a very heavy process most of the time. 
+    /// 
+    /// It is desirable to cache the data moderately (e.g., `SELECT COUNT(*) ...` in SQL).
+    async fn count(&self, id: &PersistenceId) -> Result<i64, PersistError>;
     async fn insert(&self, id: &PersistenceId, msg: JournalPayload) -> Result<(), PersistError>;
-    async fn select_one(&self, id: &PersistenceId, seq: SequenceId) -> Result<JournalPayload, PersistError>;
+    async fn select_one(&self, id: &PersistenceId, seq: SequenceId) -> Result<Option<JournalPayload>, PersistError>;
     async fn select_many(&self, id: &PersistenceId, criteria: SelectionCriteria) -> Result<BTreeSet<JournalPayload>, PersistError>;
 }
 
@@ -28,16 +36,24 @@ impl JournalProtocol {
         Self(Arc::new(provider))
     }
     
-    pub async fn insert<E: Event>(&self, id: &PersistenceId, event: &E) -> Result<(), PersistError> {
-        todo!()
+    pub async fn write_to_latest<E: Event>(&self, id: &PersistenceId, event: &E) -> Result<(), PersistError> {
+        self.0.insert(id, JournalPayload { 
+            seq: SequenceId::new(self.0.count(id).await?), 
+            key: E::REGISTRY_KEY, 
+            bytes: event.as_bytes()? 
+        }).await
     }
     
-    pub async fn select_one(&self, id: &PersistenceId, seq: SequenceId) -> Result<JournalPayload, PersistError> {
-        todo!()
+    pub async fn read(&self, id: &PersistenceId, seq: SequenceId) -> Result<Option<JournalPayload>, PersistError> {
+        self.0.select_one(id, seq).await
     }
     
-    pub async fn select_many(&self, id: &PersistenceId, criteria: SelectionCriteria) -> Result<JournalPayload, PersistError> {
-        todo!()
+    pub async fn read_to(&self, id: &PersistenceId, criteria: SelectionCriteria) -> Result<BTreeSet<JournalPayload>, PersistError> {
+        self.0.select_many(id, criteria).await
+    }
+    
+    pub async fn read_to_latest(&self, id: &PersistenceId) -> Result<BTreeSet<JournalPayload>, PersistError> {
+        self.0.select_many(id, SelectionCriteria::latest()).await
     }
 }
 
@@ -48,11 +64,17 @@ impl Clone for JournalProtocol {
 }
 
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct JournalPayload {
-    seq: SequenceId,
-    key: &'static str,
-    bytes: Vec<u8>
+    pub seq: SequenceId,
+    pub key: &'static str,
+    pub bytes: Vec<u8>
+}
+
+impl JournalPayload {
+    pub fn key(&self) -> &'static str {
+        self.key
+    }
 }
 
 impl PartialOrd<Self> for JournalPayload {

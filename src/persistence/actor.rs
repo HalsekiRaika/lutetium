@@ -1,18 +1,18 @@
 use crate::actor::{Actor, Context, FromContext};
 use crate::errors::ActorError;
-use crate::persistence::errors::PersistError;
+use crate::persistence::JournalProtocol;
+use crate::persistence::errors::{PersistError, RecoveryError};
 use crate::persistence::extension::SnapShotProtocol;
-use crate::persistence::fixture::Fixture;
+use crate::persistence::fixture::{Fixable, Fixture, FixtureJournal, FixtureSnapShot, Range};
 use crate::persistence::identifier::PersistenceId;
 use crate::persistence::journal::{Event, RecoverJournal};
-use crate::persistence::JournalProtocol;
 use crate::persistence::mapping::RecoveryMapping;
 use crate::persistence::snapshot::{RecoverSnapShot, SnapShot};
 
 #[async_trait::async_trait]
 pub trait PersistenceActor: 'static + Sync + Send + Sized {
     fn persistence_id(&self) -> PersistenceId;
-
+    
     #[allow(unused_variables)]
     async fn pre_recovery(&mut self, ctx: &mut Context) -> Result<(), ActorError> { Ok(()) }
     
@@ -26,7 +26,7 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
         let journal = JournalProtocol::from_context(ctx).await?;
        
         let mut retry = 0;
-        while let Err(e) = journal.insert(&id, event).await {
+        while let Err(e) = journal.write_to_latest(&id, event).await {
             tracing::error!("{e}");
             retry += 1;
             
@@ -57,17 +57,28 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
         Ok(())
     }
     
-    async fn recover(&mut self, id: &PersistenceId, ctx: &mut Context) -> Fixture<Self> {
-        todo!()
+    async fn recover(&mut self, id: &PersistenceId, ctx: &mut Context) -> Result<Fixture<Self>, RecoveryError> 
+        where Self: RecoveryMapping
+    {
+        // Todo: To store Journal sequence values in Snapshot to reduce extra loading.
+        let sf = FixtureSnapShot::create(id, ctx).await?;
+        let jf = FixtureJournal::create(id, Range::All, ctx).await?;
+        Ok(Fixture::new(sf, jf))
     }
 }
 
 #[async_trait::async_trait]
-impl<A: PersistenceActor> Actor for A {
+impl<A: RecoveryMapping> Actor for A {
     async fn activate(&mut self, ctx: &mut Context) -> Result<(), ActorError> {
         self.pre_recovery(ctx).await?;
+
+        let id = self.persistence_id();
         
-        // Todo: Impl Auto Recovery Process
+        let fixture = self.recover(&id, ctx).await
+            .map_err(|e| ActorError::External(Box::new(e)))?;
+        
+        fixture.apply(self, ctx).await
+            .map_err(|e| ActorError::External(Box::new(e)))?;
         
         self.post_recovery(ctx).await?;
         Ok(())

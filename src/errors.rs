@@ -23,5 +23,8 @@ pub enum ActorError {
     MissingExtension(ExtensionMissingError),
     
     #[error("Not enough values needed to build the structure.")]
-    NotEnoughValue
+    NotEnoughValue,
+    
+    #[error(transparent)]
+    External(Box<dyn std::error::Error + Sync + Send>),
 }

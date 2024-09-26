@@ -57,19 +57,35 @@ impl From<PersistenceId> for ActorId {
 }
 
 
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize)]
-pub struct SequenceId(i64);
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize)]
+pub struct SequenceId(Arc<i64>);
 
 impl SequenceId {
-    pub const MIN: SequenceId = SequenceId(i64::MIN);
-    pub const MAX: SequenceId = SequenceId(i64::MAX);
-    
     pub fn new(seq: i64) -> SequenceId {
-        Self(seq)
+        Self(Arc::new(seq))
     }
     
-    pub fn next(mut prev: SequenceId) -> SequenceId {
-        prev.0 += 1;
-        prev
+    pub fn min() -> SequenceId {
+        Self(Arc::new(i64::MIN))
+    }
+    
+    pub fn max() -> SequenceId {
+        Self(Arc::new(i64::MAX))
+    }
+    
+    pub async fn next(&self) -> SequenceId {
+        Self::new(*self.0 + 1)
+    }
+}
+
+impl From<SequenceId> for i64 {
+    fn from(value: SequenceId) -> Self {
+        *value.0
+    }
+}
+
+impl AsRef<i64> for SequenceId {
+    fn as_ref(&self) -> &i64 {
+        &self.0
     }
 }
