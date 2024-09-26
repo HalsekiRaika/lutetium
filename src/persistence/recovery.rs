@@ -1,13 +1,13 @@
 use std::marker::PhantomData;
 
-use crate::actor::Context;
 use crate::persistence::errors::RecoveryError;
 use crate::persistence::actor::PersistenceActor;
 use crate::persistence::{Event, RecoverJournal, RecoverSnapShot, SnapShot};
+use crate::persistence::context::PersistContext;
 
 #[async_trait::async_trait]
 pub(crate) trait Handler<A: PersistenceActor>: 'static + Sync + Send {
-    async fn apply(&self, actor: &mut A, payload: Vec<u8>, ctx: &mut Context) -> Result<(), RecoveryError>;
+    async fn apply(&self, actor: &mut A, payload: Vec<u8>, ctx: &mut PersistContext) -> Result<(), RecoveryError>;
 }
 
 
@@ -37,7 +37,7 @@ impl<A: PersistenceActor, E: Event> Default for EventResolver<A, E> {
 impl<A: PersistenceActor, S: SnapShot> Handler<A> for SnapShotResolver<A, S> 
     where A: RecoverSnapShot<S>
 {
-    async fn apply(&self, actor: &mut A, payload: Vec<u8>, ctx: &mut Context) -> Result<(), RecoveryError> {
+    async fn apply(&self, actor: &mut A, payload: Vec<u8>, ctx: &mut PersistContext) -> Result<(), RecoveryError> {
         let decode = S::from_bytes(&payload)?;
         actor.recover_snapshot(decode, ctx).await;
         Ok(())
@@ -48,7 +48,7 @@ impl<A: PersistenceActor, S: SnapShot> Handler<A> for SnapShotResolver<A, S>
 impl<A: PersistenceActor, E: Event> Handler<A> for EventResolver<A, E> 
     where A: RecoverJournal<E>
 {
-    async fn apply(&self, actor: &mut A, payload: Vec<u8>, ctx: &mut Context) -> Result<(), RecoveryError> {
+    async fn apply(&self, actor: &mut A, payload: Vec<u8>, ctx: &mut PersistContext) -> Result<(), RecoveryError> {
         let decode = E::from_bytes(&payload)?;
         actor.recover_journal(decode, ctx).await;
         Ok(())

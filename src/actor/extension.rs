@@ -1,12 +1,12 @@
 use std::any::type_name;
-use crate::actor::{Context, FromContext};
+use crate::actor::{ActorContext, Context, FromContext};
 use crate::errors::ActorError;
 use crate::system::ExtensionMissingError;
 
 pub struct Extension<T>(pub T);
 
 #[async_trait::async_trait]
-impl<T> FromContext for Extension<T> 
+impl<T> FromContext<Context> for Extension<T> 
     where T: Clone + Sync + Send + 'static
 {
     type Rejection = ActorError;

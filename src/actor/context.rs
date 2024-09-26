@@ -11,28 +11,33 @@ pub struct Context {
     state: RunningState
 }
 
-impl Context {
-    pub fn track_with_system(system: ActorSystem) -> Self {
+impl ActorContext for Context {
+    fn track_with_system(system: ActorSystem) -> Self {
         Self { system, state: RunningState::default() }
     }
-}
 
-impl Context {
-    pub fn shutdown(&mut self) {
+    fn shutdown(&mut self) {
         self.state.switch(|prev| { *prev = State::Shutdown });
     }
-
-    pub fn state(&self) -> &RunningState {
+    
+    fn state(&self) -> &RunningState {
         &self.state
     }
-    
-    pub fn system(&self) -> &ActorSystem {
+
+    fn system(&self) -> &ActorSystem {
         &self.system
     }
 }
 
+pub trait ActorContext: 'static + Sync + Send + Sized {
+    fn track_with_system(system: ActorSystem) -> Self;
+    fn shutdown(&mut self);
+    fn state(&self) -> &RunningState;
+    fn system(&self) -> &ActorSystem;
+}
+
 #[async_trait::async_trait]
-pub trait FromContext: 'static + Sync + Send + Sized {
+pub trait FromContext<C: ActorContext>: 'static + Sync + Send + Sized {
     type Rejection;
-    async fn from_context(ctx: &mut Context) -> Result<Self, Self::Rejection>;
+    async fn from_context(ctx: &mut C) -> Result<Self, Self::Rejection>;
 }

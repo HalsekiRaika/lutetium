@@ -1,16 +1,17 @@
 use tokio::time::Instant;
-use crate::actor::{Context, FromContext};
+use crate::actor::FromContext;
 use crate::persistence::actor::PersistenceActor;
+use crate::persistence::context::PersistContext;
 use crate::persistence::errors::RecoveryError;
+use crate::persistence::extension::SnapShotProtocol;
 use crate::persistence::fixture::{Fixable, FixtureParts};
 use crate::persistence::identifier::PersistenceId;
 use crate::persistence::mapping::{RecoverMapping, RecoveryMapping};
-use crate::persistence::SnapShotProtocol;
 
 pub struct FixtureSnapShot<A: PersistenceActor>(Option<FixtureParts<A>>);
 
 impl<A: RecoveryMapping> FixtureSnapShot<A> {
-    pub async fn create(id: &PersistenceId, ctx: &mut Context) -> Result<Self, RecoveryError> {
+    pub async fn create(id: &PersistenceId, ctx: &mut PersistContext) -> Result<Self, RecoveryError> {
         let mapping = RecoverMapping::<A>::create();
         
         if mapping.is_snapshot_map_empty() {
@@ -20,7 +21,7 @@ impl<A: RecoveryMapping> FixtureSnapShot<A> {
         
         let provider = SnapShotProtocol::from_context(ctx).await?;
 
-        let Some(payload) = provider.select(id).await? else {
+        let Some(payload) = provider.read_latest(id).await? else {
             tracing::trace!("snapshot recovery emptiness");
             return Ok(Self(None))
         };
@@ -30,7 +31,7 @@ impl<A: RecoveryMapping> FixtureSnapShot<A> {
         };
         
         
-        Ok(Self(Some(FixtureParts::new(payload.bytes, handle))))
+        Ok(Self(Some(FixtureParts::new(payload.seq, payload.bytes, handle))))
     }
     
     pub fn disable() -> Self {
@@ -44,7 +45,7 @@ impl<A: RecoveryMapping> FixtureSnapShot<A> {
 
 #[async_trait::async_trait]
 impl<A: PersistenceActor> Fixable<A> for FixtureSnapShot<A> {
-    async fn apply(self, actor: &mut A, ctx: &mut Context) -> Result<(), RecoveryError> {
+    async fn apply(self, actor: &mut A, ctx: &mut PersistContext) -> Result<(), RecoveryError> {
         let Some(fixture) = self.0 else {
             return Ok(())
         };
@@ -52,7 +53,7 @@ impl<A: PersistenceActor> Fixable<A> for FixtureSnapShot<A> {
         let now = Instant::now();
         
         fixture.refs.apply(actor, fixture.bytes, ctx).await?;
-        
+        *ctx.mut_sequence() = fixture.seq;
         tracing::trace!("snapshot recovered! {}ms", now.elapsed().as_millis());
         
         Ok(())

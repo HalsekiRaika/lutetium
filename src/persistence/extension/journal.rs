@@ -4,10 +4,11 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::actor::{Context, FromContext};
+use crate::actor::{ActorContext, FromContext};
 use crate::persistence::errors::PersistError;
 use crate::persistence::identifier::{PersistenceId, SequenceId};
 use crate::persistence::{Event, SelectionCriteria};
+use crate::persistence::context::PersistContext;
 use crate::system::ExtensionMissingError;
 
 /// Trait that summarizes the database process for the [`PersistenceActor`](crate::persistence::actor::PersistenceActor) to store Events.
@@ -24,8 +25,8 @@ pub trait JournalProvider: 'static + Sync + Send {
     /// 
     /// It is desirable to cache the data moderately (e.g., `SELECT COUNT(*) ...` in SQL).
     async fn count(&self, id: &PersistenceId) -> Result<i64, PersistError>;
-    async fn insert(&self, id: &PersistenceId, msg: JournalPayload) -> Result<(), PersistError>;
-    async fn select_one(&self, id: &PersistenceId, seq: SequenceId) -> Result<Option<JournalPayload>, PersistError>;
+    async fn insert(&self, id: &PersistenceId, seq: &SequenceId, msg: JournalPayload) -> Result<(), PersistError>;
+    async fn select_one(&self, id: &PersistenceId, seq: &SequenceId) -> Result<Option<JournalPayload>, PersistError>;
     async fn select_many(&self, id: &PersistenceId, criteria: SelectionCriteria) -> Result<BTreeSet<JournalPayload>, PersistError>;
 }
 
@@ -36,15 +37,15 @@ impl JournalProtocol {
         Self(Arc::new(provider))
     }
     
-    pub async fn write_to_latest<E: Event>(&self, id: &PersistenceId, event: &E) -> Result<(), PersistError> {
-        self.0.insert(id, JournalPayload { 
-            seq: SequenceId::new(self.0.count(id).await?), 
+    pub async fn write_to_latest<E: Event>(&self, id: &PersistenceId, seq: SequenceId, event: &E) -> Result<(), PersistError> {
+        self.0.insert(id, &seq, JournalPayload { 
+            seq, 
             key: E::REGISTRY_KEY, 
             bytes: event.as_bytes()? 
         }).await
     }
     
-    pub async fn read(&self, id: &PersistenceId, seq: SequenceId) -> Result<Option<JournalPayload>, PersistError> {
+    pub async fn read(&self, id: &PersistenceId, seq: &SequenceId) -> Result<Option<JournalPayload>, PersistError> {
         self.0.select_one(id, seq).await
     }
     
@@ -89,9 +90,9 @@ impl Ord for JournalPayload {
 
 
 #[async_trait::async_trait]
-impl FromContext for JournalProtocol {
+impl FromContext<PersistContext> for JournalProtocol {
     type Rejection = ExtensionMissingError;
-    async fn from_context(ctx: &mut Context) -> Result<Self, Self::Rejection> {
+    async fn from_context(ctx: &mut PersistContext) -> Result<Self, Self::Rejection> {
         ctx.system()
             .extension()
             .get::<JournalProtocol>()

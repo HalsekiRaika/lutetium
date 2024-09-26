@@ -1,8 +1,10 @@
 use tokio::time::Instant;
-use crate::actor::{Context, FromContext};
-use crate::persistence::{JournalProtocol, SelectionCriteria};
+use crate::actor::FromContext;
+use crate::persistence::SelectionCriteria;
 use crate::persistence::actor::PersistenceActor;
+use crate::persistence::context::PersistContext;
 use crate::persistence::errors::RecoveryError;
+use crate::persistence::extension::JournalProtocol;
 use crate::persistence::fixture::{Fixable, FixtureParts};
 use crate::persistence::identifier::{PersistenceId, SequenceId};
 use crate::persistence::mapping::{RecoverMapping, RecoveryMapping};
@@ -15,7 +17,7 @@ pub enum Range {
 pub struct FixtureJournal<A: PersistenceActor>(Option<Vec<FixtureParts<A>>>);
 
 impl<A: RecoveryMapping> FixtureJournal<A> {
-    pub async fn create(id: &PersistenceId, range: Range, ctx: &mut Context) -> Result<Self, RecoveryError> {
+    pub async fn create(id: &PersistenceId, range: Range, ctx: &mut PersistContext) -> Result<Self, RecoveryError> {
         let mapping = RecoverMapping::<A>::create();
         
         if mapping.is_event_map_empty() { 
@@ -41,9 +43,9 @@ impl<A: RecoveryMapping> FixtureJournal<A> {
         }
         
         let fixtures = payload.into_iter()
-            .map(|raw| (raw.key(), mapping.event().find(raw.key()), raw.bytes))
-            .map(|(key, fixture, bytes)| (fixture.ok_or(RecoveryError::NotCompatible(key)), bytes))
-            .map(|(fixture, bytes)| fixture.map(|handler| FixtureParts::new(bytes, handler)))
+            .map(|raw| (raw.seq, raw.key, mapping.event().find(raw.key()), raw.bytes))
+            .map(|(seq, key, fixture, bytes)| (seq, fixture.ok_or(RecoveryError::NotCompatible(key)), bytes))
+            .map(|(seq, fixture, bytes)| fixture.map(|handler| FixtureParts::new(seq, bytes, handler)))
             .collect::<Result<Vec<FixtureParts<A>>, _>>()?;
         
         
@@ -61,7 +63,7 @@ impl<A: RecoveryMapping> FixtureJournal<A> {
 
 #[async_trait::async_trait]
 impl<A: PersistenceActor> Fixable<A> for FixtureJournal<A> {
-    async fn apply(self, actor: &mut A, ctx: &mut Context) -> Result<(), RecoveryError> {
+    async fn apply(self, actor: &mut A, ctx: &mut PersistContext) -> Result<(), RecoveryError> {
         let Some(fixtures) = self.0 else {
             return Ok(())
         };
@@ -69,7 +71,8 @@ impl<A: PersistenceActor> Fixable<A> for FixtureJournal<A> {
         let now = Instant::now();
         
         for fixture in fixtures {
-            fixture.refs.apply(actor, fixture.bytes, ctx).await?
+            fixture.refs.apply(actor, fixture.bytes, ctx).await?;
+            ctx.mut_sequence().assign(fixture.seq);
         }
         
         tracing::trace!("events recovered! {}ms", now.elapsed().as_millis());

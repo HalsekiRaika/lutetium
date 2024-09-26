@@ -1,4 +1,4 @@
-use crate::actor::{Actor, Context, Message};
+use crate::actor::{Actor, ActorContext, Message};
 use crate::errors::ActorError;
 
 #[async_trait::async_trait]
@@ -11,7 +11,7 @@ where
     async fn call(
         &mut self,
         msg: M,
-        ctx: &mut Context
+        ctx: &mut Self::Context
     ) -> Result<Self::Accept, Self::Rejection>;
 }
 
@@ -25,7 +25,7 @@ impl<A: Actor> Handler<Terminate> for A {
     type Accept = ();
     type Rejection = ActorError;
 
-    async fn call(&mut self, _: Terminate, ctx: &mut Context) -> Result<Self::Accept, Self::Rejection> {
+    async fn call(&mut self, _: Terminate, ctx: &mut Self::Context) -> Result<Self::Accept, Self::Rejection> {
         tracing::warn!("received terminate signal.");
         ctx.shutdown();
         Ok(())

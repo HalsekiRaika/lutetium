@@ -10,11 +10,12 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use uuid::Uuid;
 
-use lutetium::actor::{Context, Handler, Message, TryIntoActor};
+use lutetium::actor::{Handler, Message, TryIntoActor};
 use lutetium::actor::refs::{DynRef, RegularAction};
-use lutetium::persistence::{Event, SnapShotProvider, RecoverJournal, RecoverSnapShot, SnapShot, SnapShotProtocol, SnapShotPayload, JournalPayload, JournalProvider, SelectionCriteria, JournalProtocol};
+use lutetium::persistence::{Event, RecoverJournal, RecoverSnapShot, SnapShot, SelectionCriteria, PersistContext};
 use lutetium::persistence::actor::PersistenceActor;
 use lutetium::persistence::errors::{DeserializeError, PersistError, SerializeError};
+use lutetium::persistence::extension::{JournalPayload, JournalProtocol, JournalProvider, SnapShotPayload, SnapShotProtocol, SnapShotProvider};
 use lutetium::persistence::identifier::{PersistenceId, SequenceId, ToPersistenceId};
 use lutetium::persistence::mapping::{RecoverMapping, RecoveryMapping};
 use lutetium::system::ActorSystem;
@@ -81,14 +82,15 @@ impl SnapShot for MyActor {
 
 #[async_trait::async_trait]
 impl RecoverSnapShot for MyActor {
-    async fn recover_snapshot(&mut self, snapshot: MyActor, _ctx: &mut Context) {
+    async fn recover_snapshot(&mut self, snapshot: MyActor, _ctx: &mut PersistContext) {
+        tracing::trace!("recovered snapshot: {:?}", snapshot);
         self.data = snapshot.data;
     }
 }
 
 #[async_trait::async_trait]
 impl RecoverJournal<MyEvent> for MyActor {
-    async fn recover_journal(&mut self, event: MyEvent, _ctx: &mut Context) {
+    async fn recover_journal(&mut self, event: MyEvent, _ctx: &mut PersistContext) {
         tracing::trace!("recovered event: {:?}", event);
         match event {
             MyEvent::Created { id } => {
@@ -123,7 +125,7 @@ impl Handler<MyCommand> for MyActor {
     type Accept = MyEvent;
     type Rejection = MyError;
 
-    async fn call(&mut self, msg: MyCommand, ctx: &mut Context) -> Result<Self::Accept, Self::Rejection> {
+    async fn call(&mut self, msg: MyCommand, ctx: &mut PersistContext) -> Result<Self::Accept, Self::Rejection> {
         let ev = match msg {
             MyCommand::Create => {
                 self.snapshot(self, ctx).await
@@ -155,7 +157,7 @@ pub enum MyError {
 }
 
 pub struct InMemorySnapShotStore {
-    db: Arc<RwLock<HashMap<PersistenceId, SnapShotPayload>>>
+    db: Arc<RwLock<HashMap<(PersistenceId, SequenceId), SnapShotPayload>>>
 }
 
 impl Clone for InMemorySnapShotStore {
@@ -172,22 +174,16 @@ impl Default for InMemorySnapShotStore {
 
 #[async_trait::async_trait]
 impl SnapShotProvider for InMemorySnapShotStore {
-    async fn insert(&self, id: &PersistenceId, payload: SnapShotPayload) -> Result<(), PersistError> {
-        self.db.write().await.insert(id.to_owned(), payload);
+    async fn insert(&self, id: &PersistenceId, seq: &SequenceId, payload: SnapShotPayload) -> Result<(), PersistError> {
+        self.db.write().await.insert((id.to_owned(), seq.to_owned()), payload);
         Ok(())
     }
 
-    async fn select(&self, id: &PersistenceId) -> Result<Option<SnapShotPayload>, PersistError> {
+    async fn select(&self, id: &PersistenceId, seq: &SequenceId) -> Result<Option<SnapShotPayload>, PersistError> {
         let bin = self.db.read().await
-            .get(id)
+            .iter().find(|((pid, sq), _)| pid.eq(id) && sq <= seq)
+            .map(|(_, payload)| payload)
             .cloned();
-        Ok(bin)
-    }
-
-    async fn delete(&self, id: &PersistenceId) -> Result<SnapShotPayload, PersistError> {
-        let bin = self.db.write().await
-            .remove(id)
-            .ok_or(PersistError::NotFound { id: id.to_owned() })?;
         Ok(bin)
     }
 }
@@ -217,25 +213,19 @@ impl JournalProvider for InMemoryJournalStore {
             .count() as i64)
     }
 
-    async fn insert(&self, id: &PersistenceId, msg: JournalPayload) -> Result<(), PersistError> {
-        let next = if let Some(((_, seq), _)) = self.db.read().await.iter().last() {
-            seq.next().await
-        } else {
-            SequenceId::new(0)
-        };
-        
+    async fn insert(&self, id: &PersistenceId, seq: &SequenceId, msg: JournalPayload) -> Result<(), PersistError> {
         self.db.write().await
-            .insert((id.to_owned(), next.clone()), msg.clone());
+            .insert((id.to_owned(), seq.to_owned()), msg.clone());
         
-        tracing::trace!("persisted: {:?}:{:?} => {:?}", id, next, msg);
+        tracing::trace!("persisted: {:?}:{:?} => {:?}", id, seq, msg);
         
         Ok(())
     }
 
-    async fn select_one(&self, id: &PersistenceId, seq: SequenceId) -> Result<Option<JournalPayload>, PersistError> {
+    async fn select_one(&self, id: &PersistenceId, seq: &SequenceId) -> Result<Option<JournalPayload>, PersistError> {
         Ok(self.db.read().await
             .iter()
-            .find(|((pid, sq), _)| pid.eq(id) && sq.eq(&seq))
+            .find(|((pid, sq), _)| pid.eq(id) && sq.eq(seq))
             .map(|(_, payload)| payload)
             .cloned())
     }

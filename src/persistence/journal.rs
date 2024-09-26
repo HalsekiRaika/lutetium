@@ -2,7 +2,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
-use crate::actor::Context;
+use crate::persistence::context::PersistContext;
 use crate::persistence::errors::{DeserializeError, SerializeError};
 use crate::persistence::identifier::SequenceId;
 
@@ -18,7 +18,7 @@ pub trait Event: 'static + Sync + Send + Sized
 pub trait RecoverJournal<E>: 'static + Sync + Send 
     where E: Event
 {
-    async fn recover_journal(&mut self, event: E, ctx: &mut Context);
+    async fn recover_journal(&mut self, event: E, ctx: &mut PersistContext);
 }
 
 #[async_trait::async_trait]
@@ -26,12 +26,12 @@ pub trait RecoverJournalBatch<E>: 'static + Sync + Send
     where Self: RecoverJournal<E>,
              E: Event
 {
-    async fn recover_journal_batch(&mut self, event: Batch<E>, ctx: &mut Context);
+    async fn recover_journal_batch(&mut self, event: Batch<E>, ctx: &mut PersistContext);
 }
 
 #[async_trait::async_trait]
 impl<T: RecoverJournal<E>, E: Event> RecoverJournalBatch<E> for T {
-    async fn recover_journal_batch(&mut self, event: Batch<E>, ctx: &mut Context) {
+    async fn recover_journal_batch(&mut self, event: Batch<E>, ctx: &mut PersistContext) {
         for event in event.0.into_values() {
             self.recover_journal(event, ctx).await
         }
