@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::actor::{ActorContext, FromContext};
 use crate::persistence::errors::PersistError;
-use crate::persistence::identifier::{PersistenceId, SequenceId};
+use crate::persistence::identifier::{PersistenceId, SequenceId, Version};
 use crate::persistence::{Event, SelectionCriteria};
 use crate::persistence::context::PersistContext;
 use crate::system::ExtensionMissingError;
@@ -20,9 +20,9 @@ use crate::system::ExtensionMissingError;
 /// See [`SequenceId`](SequenceId) for ID specifications.
 #[async_trait::async_trait]
 pub trait JournalProvider: 'static + Sync + Send {
-    async fn insert(&self, id: &PersistenceId, seq: &SequenceId, msg: JournalPayload) -> Result<(), PersistError>;
-    async fn select_one(&self, id: &PersistenceId, seq: &SequenceId) -> Result<Option<JournalPayload>, PersistError>;
-    async fn select_many(&self, id: &PersistenceId, criteria: SelectionCriteria) -> Result<BTreeSet<JournalPayload>, PersistError>;
+    async fn insert(&self, id: &PersistenceId, version: &Version, seq: &SequenceId, msg: JournalPayload) -> Result<(), PersistError>;
+    async fn select_one(&self, id: &PersistenceId, version: &Version, seq: &SequenceId) -> Result<Option<JournalPayload>, PersistError>;
+    async fn select_many(&self, id: &PersistenceId, version: &Version, criteria: SelectionCriteria) -> Result<Option<BTreeSet<JournalPayload>>, PersistError>;
 }
 
 pub struct JournalProtocol(Arc<dyn JournalProvider>);
@@ -32,24 +32,24 @@ impl JournalProtocol {
         Self(Arc::new(provider))
     }
     
-    pub async fn write_to_latest<E: Event>(&self, id: &PersistenceId, seq: SequenceId, event: &E) -> Result<(), PersistError> {
-        self.0.insert(id, &seq, JournalPayload { 
+    pub async fn write_to_latest<E: Event>(&self, id: &PersistenceId, version: &Version, seq: SequenceId, event: &E) -> Result<(), PersistError> {
+        self.0.insert(id, version, &seq, JournalPayload {
             seq, 
             key: E::REGISTRY_KEY, 
             bytes: event.as_bytes()? 
         }).await
     }
     
-    pub async fn read(&self, id: &PersistenceId, seq: &SequenceId) -> Result<Option<JournalPayload>, PersistError> {
-        self.0.select_one(id, seq).await
+    pub async fn read(&self, id: &PersistenceId, version: &Version, seq: &SequenceId) -> Result<Option<JournalPayload>, PersistError> {
+        self.0.select_one(id, version, seq).await
     }
     
-    pub async fn read_to(&self, id: &PersistenceId, criteria: SelectionCriteria) -> Result<BTreeSet<JournalPayload>, PersistError> {
-        self.0.select_many(id, criteria).await
+    pub async fn read_to(&self, id: &PersistenceId, version: &Version, criteria: SelectionCriteria) -> Result<Option<BTreeSet<JournalPayload>>, PersistError> {
+        self.0.select_many(id, version, criteria).await
     }
     
-    pub async fn read_to_latest(&self, id: &PersistenceId) -> Result<BTreeSet<JournalPayload>, PersistError> {
-        self.0.select_many(id, SelectionCriteria::latest()).await
+    pub async fn read_to_latest(&self, id: &PersistenceId, version: &Version) -> Result<Option<BTreeSet<JournalPayload>>, PersistError> {
+        self.0.select_many(id, version, SelectionCriteria::latest()).await
     }
 }
 

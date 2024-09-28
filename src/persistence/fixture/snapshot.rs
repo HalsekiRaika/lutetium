@@ -5,13 +5,13 @@ use crate::persistence::context::PersistContext;
 use crate::persistence::errors::RecoveryError;
 use crate::persistence::extension::SnapShotProtocol;
 use crate::persistence::fixture::{Fixable, FixtureParts};
-use crate::persistence::identifier::PersistenceId;
+use crate::persistence::identifier::{PersistenceId, Version};
 use crate::persistence::mapping::{RecoverMapping, RecoveryMapping};
 
 pub struct FixtureSnapShot<A: PersistenceActor>(Option<FixtureParts<A>>);
 
 impl<A: RecoveryMapping> FixtureSnapShot<A> {
-    pub async fn create(id: &PersistenceId, ctx: &mut PersistContext) -> Result<Self, RecoveryError> {
+    pub async fn create(id: &PersistenceId, version: &Version, ctx: &mut PersistContext) -> Result<Self, RecoveryError> {
         let mapping = RecoverMapping::<A>::create();
         
         if mapping.is_snapshot_map_empty() {
@@ -21,7 +21,7 @@ impl<A: RecoveryMapping> FixtureSnapShot<A> {
         
         let provider = SnapShotProtocol::from_context(ctx).await?;
 
-        let Some(payload) = provider.read_latest(id).await? else {
+        let Some(payload) = provider.read_latest(id, version).await? else {
             tracing::trace!("snapshot recovery emptiness");
             return Ok(Self(None))
         };

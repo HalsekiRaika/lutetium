@@ -99,3 +99,25 @@ impl Default for SequenceId {
         Self::new(0)
     }
 }
+
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+pub struct Version(&'static str);
+
+impl Version {
+    pub const fn new(version: &'static str) -> Version {
+        Self(version)
+    }
+}
+
+impl Display for Version {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl AsRef<str> for Version {
+    fn as_ref(&self) -> &str {
+        self.0
+    }
+}

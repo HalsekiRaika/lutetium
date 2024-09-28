@@ -3,14 +3,14 @@ use std::sync::Arc;
 use crate::actor::{ActorContext, FromContext};
 use crate::persistence::context::PersistContext;
 use crate::persistence::errors::PersistError;
-use crate::persistence::identifier::{PersistenceId, SequenceId};
+use crate::persistence::identifier::{PersistenceId, SequenceId, Version};
 use crate::persistence::SnapShot;
 use crate::system::ExtensionMissingError;
 
 #[async_trait::async_trait]
 pub trait SnapShotProvider: 'static + Sync + Send {
-    async fn insert(&self, id: &PersistenceId, seq: &SequenceId, payload: SnapShotPayload) -> Result<(), PersistError>;
-    async fn select(&self, id: &PersistenceId, seq: &SequenceId) -> Result<Option<SnapShotPayload>, PersistError>;
+    async fn insert(&self, id: &PersistenceId, version: &Version, seq: &SequenceId, payload: SnapShotPayload) -> Result<(), PersistError>;
+    async fn select(&self, id: &PersistenceId, version: &Version, seq: &SequenceId) -> Result<Option<SnapShotPayload>, PersistError>;
 }
 
 pub struct SnapShotProtocol(Arc<dyn SnapShotProvider>);
@@ -21,22 +21,22 @@ impl SnapShotProtocol {
     }
 
 
-    pub async fn insert<S: SnapShot>(&self, id: &PersistenceId, seq: SequenceId, snapshot: &S) -> Result<(), PersistError> {
+    pub async fn write<S: SnapShot>(&self, id: &PersistenceId, version: &Version, seq: SequenceId, snapshot: &S) -> Result<(), PersistError> {
         let payload = SnapShotPayload {
             id: id.clone(),
             key: S::REGISTRY_KEY,
             seq,
             bytes: snapshot.as_bytes()?,
         };
-        self.0.insert(id, &seq, payload).await
+        self.0.insert(id, version, &seq, payload).await
     }
 
-    pub async fn read(&self, id: &PersistenceId, seq: &SequenceId) -> Result<Option<SnapShotPayload>, PersistError> {
-        self.0.select(id, seq).await
+    pub async fn read(&self, id: &PersistenceId, version: &Version, seq: &SequenceId) -> Result<Option<SnapShotPayload>, PersistError> {
+        self.0.select(id, version, seq).await
     }
 
-    pub async fn read_latest(&self, id: &PersistenceId) -> Result<Option<SnapShotPayload>, PersistError> {
-        self.0.select(id, &SequenceId::max()).await
+    pub async fn read_latest(&self, id: &PersistenceId, version: &Version) -> Result<Option<SnapShotPayload>, PersistError> {
+        self.0.select(id, version, &SequenceId::max()).await
     }
 }
 

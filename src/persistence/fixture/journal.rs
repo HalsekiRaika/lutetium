@@ -6,7 +6,7 @@ use crate::persistence::context::PersistContext;
 use crate::persistence::errors::RecoveryError;
 use crate::persistence::extension::JournalProtocol;
 use crate::persistence::fixture::{Fixable, FixtureParts};
-use crate::persistence::identifier::{PersistenceId, SequenceId};
+use crate::persistence::identifier::{PersistenceId, SequenceId, Version};
 use crate::persistence::mapping::{RecoverMapping, RecoveryMapping};
 
 pub enum Range {
@@ -17,7 +17,7 @@ pub enum Range {
 pub struct FixtureJournal<A: PersistenceActor>(Option<Vec<FixtureParts<A>>>);
 
 impl<A: RecoveryMapping> FixtureJournal<A> {
-    pub async fn create(id: &PersistenceId, range: Range, ctx: &mut PersistContext) -> Result<Self, RecoveryError> {
+    pub async fn create(id: &PersistenceId, version: &Version, range: Range, ctx: &mut PersistContext) -> Result<Self, RecoveryError> {
         let mapping = RecoverMapping::<A>::create();
         
         if mapping.is_event_map_empty() { 
@@ -25,24 +25,24 @@ impl<A: RecoveryMapping> FixtureJournal<A> {
             return Ok(Self::disable())
         }
         
-        let journal = JournalProtocol::from_context(ctx).await?;
+        let protocol = JournalProtocol::from_context(ctx).await?;
 
         let payload = match range {
             Range::All => {
-                journal.read_to_latest(id).await?
+                protocol.read_to_latest(id, version).await?
             }
             Range::StartWith { from } => {
                 let select = SelectionCriteria::new(from, SequenceId::max())?;
-                journal.read_to(id, select).await?
+                protocol.read_to(id, version, select).await?
             }
         };
         
-        if payload.is_empty() {
+        let Some(journal) = payload else {
             tracing::trace!("journal recovery emptiness");
             return Ok(Self(None));
-        }
+        };
         
-        let fixtures = payload.into_iter()
+        let fixtures = journal.into_iter()
             .map(|raw| (raw.seq, raw.key, mapping.event().find_by_key(raw.key()), raw.bytes))
             .map(|(seq, key, fixture, bytes)| (seq, fixture.ok_or(RecoveryError::NotCompatible(key)), bytes))
             .map(|(seq, fixture, bytes)| fixture.map(|handler| FixtureParts::new(seq, bytes, handler)))

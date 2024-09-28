@@ -4,13 +4,14 @@ use crate::persistence::context::PersistContext;
 use crate::persistence::errors::{PersistError, RecoveryError};
 use crate::persistence::extension::{JournalProtocol, SnapShotProtocol};
 use crate::persistence::fixture::{Fixable, Fixture, FixtureJournal, FixtureSnapShot, Range};
-use crate::persistence::identifier::PersistenceId;
+use crate::persistence::identifier::{PersistenceId, Version};
 use crate::persistence::journal::{Event, RecoverJournal};
 use crate::persistence::mapping::RecoveryMapping;
 use crate::persistence::snapshot::{RecoverSnapShot, SnapShot};
 
 #[async_trait::async_trait]
 pub trait PersistenceActor: 'static + Sync + Send + Sized {
+    const VERSION: Version;
     fn persistence_id(&self) -> PersistenceId;
     
     #[allow(unused_variables)]
@@ -26,7 +27,7 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
         let journal = JournalProtocol::from_context(ctx).await?;
        
         let mut retry = 0;
-        while let Err(e) = journal.write_to_latest(&id, ctx.sequence().to_owned(), event).await {
+        while let Err(e) = journal.write_to_latest(&id, &Self::VERSION, ctx.sequence().to_owned(), event).await {
             tracing::error!("{e}");
             retry += 1;
             
@@ -47,7 +48,7 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
         let store = SnapShotProtocol::from_context(ctx).await?;
 
         let mut retry = 0;
-        while let Err(e) = store.insert(&id, ctx.sequence().to_owned(), snapshot).await {
+        while let Err(e) = store.write(&id, &Self::VERSION, ctx.sequence().to_owned(), snapshot).await {
             tracing::error!("{}", e);
             retry += 1;
             
@@ -62,11 +63,11 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
     async fn recover(&mut self, id: &PersistenceId, ctx: &mut PersistContext) -> Result<Fixture<Self>, RecoveryError> 
         where Self: RecoveryMapping
     {
-        let sf = FixtureSnapShot::create(id, ctx).await?;
+        let sf = FixtureSnapShot::create(id, &Self::VERSION, ctx).await?;
         let jf = if sf.is_disabled() { 
-            FixtureJournal::create(id, Range::All, ctx).await?
+            FixtureJournal::create(id, &Self::VERSION, Range::All, ctx).await?
         } else {
-            FixtureJournal::create(id, Range::StartWith { from: ctx.sequence().to_owned() }, ctx).await?
+            FixtureJournal::create(id, &Self::VERSION, Range::StartWith { from: ctx.sequence().to_owned() }, ctx).await?
         };
         Ok(Fixture::new(sf, jf))
     }

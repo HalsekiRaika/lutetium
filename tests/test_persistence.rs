@@ -16,7 +16,7 @@ use lutetium::persistence::{Event, RecoverJournal, RecoverSnapShot, SnapShot, Se
 use lutetium::persistence::actor::PersistenceActor;
 use lutetium::persistence::errors::{DeserializeError, PersistError, SerializeError};
 use lutetium::persistence::extension::{JournalPayload, JournalProtocol, JournalProvider, SnapShotPayload, SnapShotProtocol, SnapShotProvider};
-use lutetium::persistence::identifier::{PersistenceId, SequenceId, ToPersistenceId};
+use lutetium::persistence::identifier::{PersistenceId, SequenceId, ToPersistenceId, Version};
 use lutetium::persistence::mapping::{RecoverMapping, RecoveryMapping};
 use lutetium::system::ActorSystem;
 
@@ -107,6 +107,8 @@ impl RecoverJournal<MyEvent> for MyActor {
 }
 
 impl PersistenceActor for MyActor {
+    const VERSION: Version = Version::new("0.0.1");
+    
     fn persistence_id(&self) -> PersistenceId {
         self.id.to_persistence_id()
     }
@@ -156,8 +158,9 @@ pub enum MyError {
     Persist(anyhow::Error)
 }
 
+#[allow(clippy::type_complexity)]
 pub struct InMemorySnapShotStore {
-    db: Arc<RwLock<HashMap<(PersistenceId, SequenceId), SnapShotPayload>>>
+    db: Arc<RwLock<HashMap<Version, HashMap<(PersistenceId, SequenceId), SnapShotPayload>>>>
 }
 
 impl Clone for InMemorySnapShotStore {
@@ -174,22 +177,37 @@ impl Default for InMemorySnapShotStore {
 
 #[async_trait::async_trait]
 impl SnapShotProvider for InMemorySnapShotStore {
-    async fn insert(&self, id: &PersistenceId, seq: &SequenceId, payload: SnapShotPayload) -> Result<(), PersistError> {
-        self.db.write().await.insert((id.to_owned(), seq.to_owned()), payload);
+    async fn insert(&self, id: &PersistenceId, version: &Version, seq: &SequenceId, payload: SnapShotPayload) -> Result<(), PersistError> {
+        let mut lock = self.db.write().await;
+        if let Some((_, store)) = lock.iter_mut().find(|(ver, _)| ver.eq(&version)) {
+            store.insert((id.to_owned(), seq.to_owned()), payload);
+        } else {
+            let mut store = HashMap::new();
+            store.insert((id.to_owned(), seq.to_owned()), payload);
+            
+            lock.insert(version.to_owned(), store);
+        }
+        
         Ok(())
     }
 
-    async fn select(&self, id: &PersistenceId, seq: &SequenceId) -> Result<Option<SnapShotPayload>, PersistError> {
+    async fn select(&self, id: &PersistenceId, version: &Version, seq: &SequenceId) -> Result<Option<SnapShotPayload>, PersistError> {
         let bin = self.db.read().await
-            .iter().find(|((pid, sq), _)| pid.eq(id) && sq <= seq)
-            .map(|(_, payload)| payload)
-            .cloned();
+            .iter()
+            .find(|(ver, _)| ver.eq(&version))
+            .and_then(|(_, store)| {
+                store.iter()
+                    .find(|((pid, sq), _)| pid.eq(id) && sq <= seq)
+                    .map(|(_, payload)| payload)
+                    .cloned()
+            });
         Ok(bin)
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub struct InMemoryJournalStore {
-    db: Arc<RwLock<HashMap<(PersistenceId, SequenceId), JournalPayload>>>
+    db: Arc<RwLock<HashMap<Version, HashMap<(PersistenceId, SequenceId), JournalPayload>>>>
 }
 
 impl Clone for InMemoryJournalStore {
@@ -206,37 +224,47 @@ impl Default for InMemoryJournalStore {
 
 #[async_trait::async_trait]
 impl JournalProvider for InMemoryJournalStore {
-    async fn count(&self, id: &PersistenceId) -> Result<i64, PersistError> {
-        Ok(self.db.read().await
-            .iter()
-            .filter(|((pid, _), _)| pid.eq(id))
-            .count() as i64)
-    }
-
-    async fn insert(&self, id: &PersistenceId, seq: &SequenceId, msg: JournalPayload) -> Result<(), PersistError> {
-        self.db.write().await
-            .insert((id.to_owned(), seq.to_owned()), msg.clone());
-        
-        tracing::trace!("persisted: {:?}:{:?} => {:?}", id, seq, msg);
+    async fn insert(&self, id: &PersistenceId, version: &Version, seq: &SequenceId, msg: JournalPayload) -> Result<(), PersistError> {
+        let mut lock = self.db.write().await;
+        if let Some((_, store)) = lock.iter_mut().find(|(ver, _)| ver.eq(&version)) {
+            store.insert((id.to_owned(), seq.to_owned()), msg);
+        } else {
+            let mut store = HashMap::new();
+            store.insert((id.to_owned(), seq.to_owned()), msg);
+            
+            lock.insert(version.to_owned(), store);
+        }
         
         Ok(())
     }
 
-    async fn select_one(&self, id: &PersistenceId, seq: &SequenceId) -> Result<Option<JournalPayload>, PersistError> {
-        Ok(self.db.read().await
+    async fn select_one(&self, id: &PersistenceId, version: &Version, seq: &SequenceId) -> Result<Option<JournalPayload>, PersistError> {
+        let payload = self.db.read().await
             .iter()
-            .find(|((pid, sq), _)| pid.eq(id) && sq.eq(seq))
-            .map(|(_, payload)| payload)
-            .cloned())
+            .find(|(ver, _)| ver.eq(&version))
+            .and_then(|(_, store)| {
+                store.iter()
+                    .find(|((pid, sq), _)| pid.eq(id) && sq.eq(seq))
+                    .map(|(_, payload)| payload)
+                    .cloned()
+            });
+        
+        Ok(payload)
     }
 
-    async fn select_many(&self, id: &PersistenceId, criteria: SelectionCriteria) -> Result<BTreeSet<JournalPayload>, PersistError> {
-        Ok(self.db.read().await
+    async fn select_many(&self, id: &PersistenceId, version: &Version, criteria: SelectionCriteria) -> Result<Option<BTreeSet<JournalPayload>>, PersistError> {
+        let col = self.db.read().await
             .iter()
-            .filter(|((pid, sq), _)| pid.eq(id) && criteria.matches(sq))
-            .map(|(_, payload)| payload)
-            .cloned()
-            .collect())
+            .find(|(ver, _)| ver.eq(&version))
+            .map(|(_, store)| {
+                store.iter()
+                    .filter(|((pid, sq), _)| pid.eq(id) && criteria.matches(sq))
+                    .map(|(_, payload)| payload)
+                    .cloned()
+                    .collect::<BTreeSet<_>>()
+            });
+        
+        Ok(col)
     }
 }
 
