@@ -62,9 +62,12 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
     async fn recover(&mut self, id: &PersistenceId, ctx: &mut PersistContext) -> Result<Fixture<Self>, RecoveryError> 
         where Self: RecoveryMapping
     {
-        // Todo: To store Journal sequence values in Snapshot to reduce extra loading.
         let sf = FixtureSnapShot::create(id, ctx).await?;
-        let jf = FixtureJournal::create(id, Range::All, ctx).await?;
+        let jf = if sf.is_disabled() { 
+            FixtureJournal::create(id, Range::All, ctx).await?
+        } else {
+            FixtureJournal::create(id, Range::StartWith { from: ctx.sequence().to_owned() }, ctx).await?
+        };
         Ok(Fixture::new(sf, jf))
     }
 }
