@@ -20,11 +20,6 @@ use crate::system::ExtensionMissingError;
 /// See [`SequenceId`](SequenceId) for ID specifications.
 #[async_trait::async_trait]
 pub trait JournalProvider: 'static + Sync + Send {
-    /// Assume the process of counting stored Events based on [`PersistenceId`](PersistenceId), 
-    /// but this can be a very heavy process most of the time. 
-    /// 
-    /// It is desirable to cache the data moderately (e.g., `SELECT COUNT(*) ...` in SQL).
-    async fn count(&self, id: &PersistenceId) -> Result<i64, PersistError>;
     async fn insert(&self, id: &PersistenceId, seq: &SequenceId, msg: JournalPayload) -> Result<(), PersistError>;
     async fn select_one(&self, id: &PersistenceId, seq: &SequenceId) -> Result<Option<JournalPayload>, PersistError>;
     async fn select_many(&self, id: &PersistenceId, criteria: SelectionCriteria) -> Result<BTreeSet<JournalPayload>, PersistError>;
