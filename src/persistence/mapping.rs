@@ -25,7 +25,7 @@ impl<A: PersistenceActor> Default for ResolveMapper<A> {
 }
 
 impl<A: PersistenceActor> ResolveMapper<A> {
-    pub(crate) fn find(&self, key: &str) -> Option<Arc<dyn Handler<A>>> {
+    pub(crate) fn find_by_key(&self, key: &str) -> Option<Arc<dyn Handler<A>>> {
         self.0.iter().find(|s| s.key().eq(key))
             .map(|r| Arc::clone(r.value()))
     }

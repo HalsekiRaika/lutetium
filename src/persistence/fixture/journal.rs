@@ -43,7 +43,7 @@ impl<A: RecoveryMapping> FixtureJournal<A> {
         }
         
         let fixtures = payload.into_iter()
-            .map(|raw| (raw.seq, raw.key, mapping.event().find(raw.key()), raw.bytes))
+            .map(|raw| (raw.seq, raw.key, mapping.event().find_by_key(raw.key()), raw.bytes))
             .map(|(seq, key, fixture, bytes)| (seq, fixture.ok_or(RecoveryError::NotCompatible(key)), bytes))
             .map(|(seq, fixture, bytes)| fixture.map(|handler| FixtureParts::new(seq, bytes, handler)))
             .collect::<Result<Vec<FixtureParts<A>>, _>>()?;

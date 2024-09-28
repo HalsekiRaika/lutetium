@@ -26,7 +26,7 @@ impl<A: RecoveryMapping> FixtureSnapShot<A> {
             return Ok(Self(None))
         };
         
-        let Some(handle) = mapping.snapshot().find(payload.key()) else { 
+        let Some(handle) = mapping.snapshot().find_by_key(payload.key()) else { 
             return Err(RecoveryError::NotCompatible(payload.key()))
         };
         
