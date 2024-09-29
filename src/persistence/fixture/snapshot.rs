@@ -30,6 +30,7 @@ impl<A: RecoveryMapping> FixtureSnapShot<A> {
             return Err(RecoveryError::NotCompatible(payload.key()))
         };
         
+        ctx.mut_sequence().assign(payload.seq);
         
         Ok(Self(Some(FixtureParts::new(payload.seq, payload.bytes, handle))))
     }

@@ -160,7 +160,7 @@ pub enum MyError {
 
 #[allow(clippy::type_complexity)]
 pub struct InMemorySnapShotStore {
-    db: Arc<RwLock<HashMap<Version, HashMap<(PersistenceId, SequenceId), SnapShotPayload>>>>
+    db: Arc<RwLock<HashMap<(PersistenceId, Version), HashMap<SequenceId, SnapShotPayload>>>>
 }
 
 impl Clone for InMemorySnapShotStore {
@@ -179,13 +179,13 @@ impl Default for InMemorySnapShotStore {
 impl SnapShotProvider for InMemorySnapShotStore {
     async fn insert(&self, id: &PersistenceId, version: &Version, seq: &SequenceId, payload: SnapShotPayload) -> Result<(), PersistError> {
         let mut lock = self.db.write().await;
-        if let Some((_, store)) = lock.iter_mut().find(|(ver, _)| ver.eq(&version)) {
-            store.insert((id.to_owned(), seq.to_owned()), payload);
+        if let Some((_, store)) = lock.iter_mut().find(|((pid, ver), _)| pid.eq(id) && ver.eq(version)) {
+            store.insert(seq.to_owned(), payload);
         } else {
             let mut store = HashMap::new();
-            store.insert((id.to_owned(), seq.to_owned()), payload);
+            store.insert(seq.to_owned(), payload);
             
-            lock.insert(version.to_owned(), store);
+            lock.insert((id.to_owned(), version.to_owned()), store);
         }
         
         Ok(())
@@ -194,10 +194,10 @@ impl SnapShotProvider for InMemorySnapShotStore {
     async fn select(&self, id: &PersistenceId, version: &Version, seq: &SequenceId) -> Result<Option<SnapShotPayload>, PersistError> {
         let bin = self.db.read().await
             .iter()
-            .find(|(ver, _)| ver.eq(&version))
+            .find(|((pid, ver), _)| pid.eq(id) && ver.eq(version))
             .and_then(|(_, store)| {
                 store.iter()
-                    .find(|((pid, sq), _)| pid.eq(id) && sq <= seq)
+                    .find(|(sq, _)| sq < &seq)
                     .map(|(_, payload)| payload)
                     .cloned()
             });
@@ -207,7 +207,7 @@ impl SnapShotProvider for InMemorySnapShotStore {
 
 #[allow(clippy::type_complexity)]
 pub struct InMemoryJournalStore {
-    db: Arc<RwLock<HashMap<Version, HashMap<(PersistenceId, SequenceId), JournalPayload>>>>
+    db: Arc<RwLock<HashMap<(PersistenceId, Version), HashMap<SequenceId, JournalPayload>>>>
 }
 
 impl Clone for InMemoryJournalStore {
@@ -226,13 +226,13 @@ impl Default for InMemoryJournalStore {
 impl JournalProvider for InMemoryJournalStore {
     async fn insert(&self, id: &PersistenceId, version: &Version, seq: &SequenceId, msg: JournalPayload) -> Result<(), PersistError> {
         let mut lock = self.db.write().await;
-        if let Some((_, store)) = lock.iter_mut().find(|(ver, _)| ver.eq(&version)) {
-            store.insert((id.to_owned(), seq.to_owned()), msg);
+        if let Some((_, store)) = lock.iter_mut().find(|((pid, ver), _)| pid.eq(id) && ver.eq(version)) {
+            store.insert(seq.to_owned(), msg);
         } else {
             let mut store = HashMap::new();
-            store.insert((id.to_owned(), seq.to_owned()), msg);
+            store.insert(seq.to_owned(), msg);
             
-            lock.insert(version.to_owned(), store);
+            lock.insert((id.to_owned(), version.to_owned()), store);
         }
         
         Ok(())
@@ -241,10 +241,10 @@ impl JournalProvider for InMemoryJournalStore {
     async fn select_one(&self, id: &PersistenceId, version: &Version, seq: &SequenceId) -> Result<Option<JournalPayload>, PersistError> {
         let payload = self.db.read().await
             .iter()
-            .find(|(ver, _)| ver.eq(&version))
+            .find(|((pid, ver), _)| pid.eq(id) && ver.eq(version))
             .and_then(|(_, store)| {
                 store.iter()
-                    .find(|((pid, sq), _)| pid.eq(id) && sq.eq(seq))
+                    .find(|(sq, _)| sq.eq(&seq))
                     .map(|(_, payload)| payload)
                     .cloned()
             });
@@ -255,10 +255,10 @@ impl JournalProvider for InMemoryJournalStore {
     async fn select_many(&self, id: &PersistenceId, version: &Version, criteria: SelectionCriteria) -> Result<Option<BTreeSet<JournalPayload>>, PersistError> {
         let col = self.db.read().await
             .iter()
-            .find(|(ver, _)| ver.eq(&version))
+            .find(|((pid, ver), _)| pid.eq(id) && ver.eq(version))
             .map(|(_, store)| {
                 store.iter()
-                    .filter(|((pid, sq), _)| pid.eq(id) && criteria.matches(sq))
+                    .filter(|(sq, _)| criteria.matches(sq))
                     .map(|(_, payload)| payload)
                     .cloned()
                     .collect::<BTreeSet<_>>()

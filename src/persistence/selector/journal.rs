@@ -23,7 +23,7 @@ impl SelectionCriteria {
     }
     
     pub fn matches(&self, seq: &SequenceId) -> bool {
-        &self.min <= seq && seq <= &self.max
+        &self.min < seq && seq <= &self.max
     }
 }
 
