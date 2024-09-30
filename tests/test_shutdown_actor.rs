@@ -5,7 +5,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use uuid::Uuid;
 
-use lutetium::actor::Actor;
+use lutetium::actor::{Actor, Context};
 use lutetium::system::ActorSystem;
 
 #[derive(Debug, Copy, Clone)]
@@ -14,7 +14,7 @@ pub struct State {
     state: i32
 }
 
-impl Actor for State {}
+impl Actor for State { type Context = Context; }
 
 #[tokio::test]
 async fn main() -> anyhow::Result<()> {

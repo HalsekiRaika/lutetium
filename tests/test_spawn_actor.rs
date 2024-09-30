@@ -47,7 +47,7 @@ pub enum PersonEvent {
     IncrementedAge
 }
 
-impl Actor for Person {}
+impl Actor for Person { type Context = Context; }
 
 impl TryIntoActor for PersonCommand {
     type Identifier = PersonId;

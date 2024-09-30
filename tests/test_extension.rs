@@ -44,7 +44,7 @@ pub enum PersonEvent {
     IncrementedAge
 }
 
-impl Actor for Person {}
+impl Actor for Person { type Context = Context; }
 
 #[async_trait]
 impl Handler<PersonCommand> for Person {
