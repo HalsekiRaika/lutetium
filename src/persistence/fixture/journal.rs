@@ -63,7 +63,7 @@ impl<A: RecoveryMapping> FixtureJournal<A> {
 
 #[async_trait::async_trait]
 impl<A: PersistenceActor> Fixable<A> for FixtureJournal<A> {
-    async fn apply(self, actor: &mut A, ctx: &mut PersistContext) -> Result<(), RecoveryError> {
+    async fn apply(self, actor: &mut Option<A>, ctx: &mut PersistContext) -> Result<(), RecoveryError> {
         let Some(fixtures) = self.0 else {
             return Ok(())
         };

@@ -9,10 +9,12 @@ mod recovery;
 mod selector;
 mod fixture;
 mod context;
+mod system;
 
 pub use self::{
     context::*,
     snapshot::*,
     journal::*,
     selector::*,
+    system::*,
 };

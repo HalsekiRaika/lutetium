@@ -2,11 +2,7 @@ mod extension;
 mod lifecycle;
 mod registry;
 
-pub use self::{
-    extension::*,
-    lifecycle::*,
-    registry::*,
-};
+pub use self::extension::*;
 
 use std::future::Future;
 use std::sync::Arc;
@@ -15,17 +11,18 @@ use crate::actor::refs::ActorRef;
 use crate::actor::{Actor, ActorContext, TryIntoActor};
 use crate::errors::ActorError;
 use crate::identifier::{IntoActorId, ToActorId};
+use crate::system::registry::Registry;
 
 pub struct ActorSystem {
-    ext: Arc<Extensions>,
-    registry: Registry
+    pub(crate) ext: Arc<Extensions>,
+    pub(crate) registry: Registry
 }
 
 #[async_trait::async_trait(?Send)]
 pub trait LutetiumActorSystem: 'static + Sync + Send {
     async fn spawn<A: Actor>(&self, id: impl IntoActorId, actor: A) -> Result<ActorRef<A>, ActorError>;
     async fn try_spawn<T: TryIntoActor>(&self, id: T::Identifier, into: T) -> Result<Result<ActorRef<T::Actor>, ActorError>, T::Rejection>;
-    async fn shutdown(&self, id: impl ToActorId) -> Result<(), ActorError>;
+    async fn shutdown(&self, id: &impl ToActorId) -> Result<(), ActorError>;
     async fn shutdown_all(&self) -> Result<(), ActorError>;
     async fn find<A: Actor>(&self, id: impl ToActorId) -> Result<ActorRef<A>, ActorError>;
     async fn find_or<A: Actor, I: ToActorId, Fut>(&self, id: I, or_nothing: impl FnOnce(I) -> Fut) -> Result<ActorRef<A>, ActorError> where Fut: Future<Output = A> + 'static + Sync + Send;
@@ -46,7 +43,7 @@ impl LutetiumActorSystem for ActorSystem {
         Ok(self.spawn(id, actor).await)
     }
     
-    async fn shutdown(&self, id: impl ToActorId) -> Result<(), ActorError> {
+    async fn shutdown(&self, id: &impl ToActorId) -> Result<(), ActorError> {
         self.registry
             .deregister(&id.to_actor_id())
             .await
@@ -114,9 +111,15 @@ impl Factory {
     }
 }
 
-pub struct Behavior<A: Actor> {
+pub(crate) struct Behavior<A: Actor> {
     actor: A,
     ctx: A::Context
+}
+
+impl<A: Actor> Behavior<A> {
+    pub fn new(actor: A, ctx: A::Context) -> Self {
+        Self { actor, ctx }
+    }
 }
 
 pub struct SystemBuilder {

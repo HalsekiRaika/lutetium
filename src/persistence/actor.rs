@@ -3,7 +3,7 @@ use crate::errors::ActorError;
 use crate::persistence::context::PersistContext;
 use crate::persistence::errors::{PersistError, RecoveryError};
 use crate::persistence::extension::{JournalProtocol, SnapShotProtocol};
-use crate::persistence::fixture::{Fixable, Fixture, FixtureJournal, FixtureSnapShot, Range};
+use crate::persistence::fixture::{Fixture, FixtureJournal, FixtureSnapShot, Range};
 use crate::persistence::identifier::{PersistenceId, Version};
 use crate::persistence::journal::{Event, RecoverJournal};
 use crate::persistence::mapping::RecoveryMapping;
@@ -15,10 +15,7 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
     fn persistence_id(&self) -> PersistenceId;
     
     #[allow(unused_variables)]
-    async fn pre_recovery(&mut self, ctx: &mut PersistContext) -> Result<(), ActorError> { Ok(()) }
-    
-    #[allow(unused_variables)]
-    async fn post_recovery(&mut self, ctx: &mut PersistContext) -> Result<(), ActorError> { Ok(()) }
+    async fn activate(&mut self, ctx: &mut PersistContext) -> Result<(), ActorError> { Ok(()) }
     
     async fn persist<E: Event>(&self, event: &E, ctx: &mut PersistContext) -> Result<(), PersistError> 
         where Self: RecoverJournal<E> + RecoveryMapping,
@@ -60,7 +57,7 @@ pub trait PersistenceActor: 'static + Sync + Send + Sized {
         Ok(())
     }
     
-    async fn recover(&mut self, id: &PersistenceId, ctx: &mut PersistContext) -> Result<Fixture<Self>, RecoveryError> 
+    async fn recover(id: &PersistenceId, ctx: &mut PersistContext) -> Result<Fixture<Self>, RecoveryError> 
         where Self: RecoveryMapping
     {
         let sf = FixtureSnapShot::create(id, &Self::VERSION, ctx).await?;
@@ -78,18 +75,7 @@ impl<A: RecoveryMapping> Actor for A {
     type Context = PersistContext;
     
     async fn activate(&mut self, ctx: &mut PersistContext) -> Result<(), ActorError> {
-        self.pre_recovery(ctx).await?;
-
-        let id = self.persistence_id();
-        
-        let fixture = self.recover(&id, ctx).await
-            .map_err(|e| ActorError::External(Box::new(e)))?;
-        
-        fixture.apply(self, ctx).await
-            .map_err(|e| ActorError::External(Box::new(e)))?;
-        
-        self.post_recovery(ctx).await?;
-        Ok(())
+        self.activate(ctx).await
     }
 }
 

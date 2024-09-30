@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use lutetium::actor::{Handler, Message, TryIntoActor};
 use lutetium::actor::refs::{DynRef, RegularAction};
-use lutetium::persistence::{Event, RecoverJournal, RecoverSnapShot, SnapShot, SelectionCriteria, PersistContext};
+use lutetium::persistence::{Event, RecoverJournal, RecoverSnapShot, SnapShot, SelectionCriteria, PersistContext, PersistSystemExt};
 use lutetium::persistence::actor::PersistenceActor;
 use lutetium::persistence::errors::{DeserializeError, PersistError, SerializeError};
 use lutetium::persistence::extension::{JournalPayload, JournalProtocol, JournalProvider, SnapShotPayload, SnapShotProtocol, SnapShotProvider};
@@ -82,25 +82,45 @@ impl SnapShot for MyActor {
 
 #[async_trait::async_trait]
 impl RecoverSnapShot for MyActor {
-    async fn recover_snapshot(&mut self, snapshot: MyActor, _ctx: &mut PersistContext) {
+    async fn recover_snapshot(this: &mut Option<Self>, snapshot: MyActor, _ctx: &mut PersistContext) {
         tracing::trace!("recovered snapshot: {:?}", snapshot);
-        self.data = snapshot.data;
+        match this {
+            None => {
+                *this = Some(MyActor {
+                    id: snapshot.id,
+                    data: snapshot.data,
+                });
+            }
+            Some(this) => {
+                this.data = snapshot.data
+            }
+        }
     }
 }
 
 #[async_trait::async_trait]
 impl RecoverJournal<MyEvent> for MyActor {
-    async fn recover_journal(&mut self, event: MyEvent, _ctx: &mut PersistContext) {
+    async fn recover_journal(this: &mut Option<Self>, event: MyEvent, _ctx: &mut PersistContext) {
         tracing::trace!("recovered event: {:?}", event);
-        match event {
-            MyEvent::Created { id } => {
-                self.id = id;
+        match this {
+            None => {
+                let MyEvent::Created { id } = event else {
+                    return;
+                };
+                *this = Some(MyActor { id, data: HashMap::new() })
             }
-            MyEvent::Added { k, v } => {
-                self.data.insert(k, v);
-            }
-            MyEvent::Removed { ref k } => {
-                self.data.remove(k);
+            Some(this) => {
+                match event {
+                    MyEvent::Created { id } => {
+                        this.id = id;
+                    }
+                    MyEvent::Added { k, v } => {
+                        this.data.insert(k, v);
+                    }
+                    MyEvent::Removed { ref k } => {
+                        this.data.remove(k);
+                    }
+                }
             }
         }
     }
@@ -306,7 +326,7 @@ async fn persistence_actor_run() -> anyhow::Result<()> {
     
     system.shutdown(&id).await?;
     
-    let refs = system.try_spawn(id, MyCommand::Create).await??;
+    let refs = system.spawn_with_recovery::<MyActor>(&id, None).await?;
     
     refs.shutdown().await?;
     

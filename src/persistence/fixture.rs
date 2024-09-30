@@ -28,7 +28,7 @@ impl<A: RecoveryMapping> Fixture<A> {
 
 #[async_trait::async_trait]
 impl<A: PersistenceActor> Fixable<A> for Fixture<A> {
-    async fn apply(self, actor: &mut A, ctx: &mut PersistContext) -> Result<(), RecoveryError> {
+    async fn apply(self, actor: &mut Option<A>, ctx: &mut PersistContext) -> Result<(), RecoveryError> {
         self.snapshot.apply(actor, ctx).await?;
         self.journal.apply(actor, ctx).await?;
         Ok(())
@@ -49,5 +49,5 @@ impl<A: PersistenceActor> FixtureParts<A> {
 
 #[async_trait::async_trait]
 pub trait Fixable<A: PersistenceActor>: 'static + Sync + Send {
-    async fn apply(self, actor: &mut A, ctx: &mut PersistContext) -> Result<(), RecoveryError>;
+    async fn apply(self, actor: &mut Option<A>, ctx: &mut PersistContext) -> Result<(), RecoveryError>;
 }

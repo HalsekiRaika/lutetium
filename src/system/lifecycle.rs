@@ -3,7 +3,7 @@ use crate::actor::refs::{ActorRef, Applier};
 use crate::errors::ActorError;
 use crate::system::Behavior;
 
-pub struct LifeCycle;
+pub(crate) struct LifeCycle;
 
 impl LifeCycle {
     pub async fn spawn<A: Actor>(behavior: Behavior<A>) -> Result<ActorRef<A>, ActorError> {

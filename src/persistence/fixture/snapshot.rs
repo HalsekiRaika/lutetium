@@ -46,7 +46,7 @@ impl<A: RecoveryMapping> FixtureSnapShot<A> {
 
 #[async_trait::async_trait]
 impl<A: PersistenceActor> Fixable<A> for FixtureSnapShot<A> {
-    async fn apply(self, actor: &mut A, ctx: &mut PersistContext) -> Result<(), RecoveryError> {
+    async fn apply(self, actor: &mut Option<A>, ctx: &mut PersistContext) -> Result<(), RecoveryError> {
         let Some(fixture) = self.0 else {
             return Ok(())
         };

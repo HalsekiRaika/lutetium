@@ -8,6 +8,6 @@ pub trait SnapShot: 'static + Sync + Send + Sized {
 }
 
 #[async_trait::async_trait]
-pub trait RecoverSnapShot<S: SnapShot = Self>: 'static + Sync + Send {
-    async fn recover_snapshot(&mut self, snapshot: S, ctx: &mut PersistContext);
+pub trait RecoverSnapShot<S: SnapShot = Self>: 'static + Sync + Send + Sized {
+    async fn recover_snapshot(this: &mut Option<Self>, snapshot: S, ctx: &mut PersistContext);
 }

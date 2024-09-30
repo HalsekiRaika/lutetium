@@ -7,9 +7,10 @@ use crate::actor::Actor;
 use crate::actor::refs::{ActorRef, AnyRef, DynRef};
 use crate::errors::ActorError;
 use crate::identifier::ActorId;
-use crate::system::{Behavior, LifeCycle};
+use crate::system::Behavior;
+use crate::system::lifecycle::LifeCycle;
 
-pub struct Registry(Arc<RwLock<HashMap<ActorId, AnyRef>>>);
+pub(crate) struct Registry(Arc<RwLock<HashMap<ActorId, AnyRef>>>);
 
 impl Registry {
     pub async fn register<A: Actor>(&self, id: ActorId, behavior: Behavior<A>) -> Result<ActorRef<A>, ActorError> {

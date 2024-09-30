@@ -25,6 +25,12 @@ pub enum ActorError {
     #[error("Not enough values needed to build the structure.")]
     NotEnoughValue,
     
+    #[error("Actor activation failed. `{id}`: {reason}")]
+    FailedActivation {
+        reason: &'static str,
+        id: String
+    },
+    
     #[error(transparent)]
     External(Box<dyn std::error::Error + Sync + Send>),
 }
