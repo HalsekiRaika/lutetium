@@ -11,7 +11,7 @@ use lutetium::actor::{Actor, Context, Handler, Message, TryIntoActor};
 use lutetium::actor::refs::{ActorRef, DynRef, ErrorFlattenAction};
 use lutetium::errors::ActorError;
 use lutetium::identifier::IntoActorId;
-use lutetium::system::ActorSystem;
+use lutetium::system::{ActorSystem, LutetiumActorSystem};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct PersonId(Uuid);

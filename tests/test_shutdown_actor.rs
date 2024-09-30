@@ -6,7 +6,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use uuid::Uuid;
 
 use lutetium::actor::{Actor, Context};
-use lutetium::system::ActorSystem;
+use lutetium::system::{ActorSystem, LutetiumActorSystem};
 
 #[derive(Debug, Copy, Clone)]
 pub struct State {

@@ -18,7 +18,7 @@ use lutetium::persistence::errors::{DeserializeError, PersistError, SerializeErr
 use lutetium::persistence::extension::{JournalPayload, JournalProtocol, JournalProvider, SnapShotPayload, SnapShotProtocol, SnapShotProvider};
 use lutetium::persistence::identifier::{PersistenceId, SequenceId, ToPersistenceId, Version};
 use lutetium::persistence::mapping::{RecoverMapping, RecoveryMapping};
-use lutetium::system::ActorSystem;
+use lutetium::system::{ActorSystem, LutetiumActorSystem};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MyActor {

@@ -21,8 +21,19 @@ pub struct ActorSystem {
     registry: Registry
 }
 
-impl ActorSystem {
-    pub async fn spawn<A: Actor>(&self, id: impl IntoActorId, actor: A) -> Result<ActorRef<A>, ActorError> {
+#[async_trait::async_trait(?Send)]
+pub trait LutetiumActorSystem: 'static + Sync + Send {
+    async fn spawn<A: Actor>(&self, id: impl IntoActorId, actor: A) -> Result<ActorRef<A>, ActorError>;
+    async fn try_spawn<T: TryIntoActor>(&self, id: T::Identifier, into: T) -> Result<Result<ActorRef<T::Actor>, ActorError>, T::Rejection>;
+    async fn shutdown(&self, id: impl ToActorId) -> Result<(), ActorError>;
+    async fn shutdown_all(&self) -> Result<(), ActorError>;
+    async fn find<A: Actor>(&self, id: impl ToActorId) -> Result<ActorRef<A>, ActorError>;
+    async fn find_or<A: Actor, I: ToActorId, Fut>(&self, id: I, or_nothing: impl FnOnce(I) -> Fut) -> Result<ActorRef<A>, ActorError> where Fut: Future<Output = A> + 'static + Sync + Send;
+}
+
+#[async_trait::async_trait(?Send)]
+impl LutetiumActorSystem for ActorSystem {
+    async fn spawn<A: Actor>(&self, id: impl IntoActorId, actor: A) -> Result<ActorRef<A>, ActorError> {
         let behavior = Factory::create(actor, self.clone());
         let registered = self.registry
             .register(id.into_actor_id(), behavior)
@@ -30,24 +41,24 @@ impl ActorSystem {
         Ok(registered)
     }
     
-    pub async fn try_spawn<T: TryIntoActor>(&self, id: T::Identifier, into: T) -> Result<Result<ActorRef<T::Actor>, ActorError>, T::Rejection> {
+    async fn try_spawn<T: TryIntoActor>(&self, id: T::Identifier, into: T) -> Result<Result<ActorRef<T::Actor>, ActorError>, T::Rejection> {
         let (id, actor) = into.try_into_actor(id)?;
         Ok(self.spawn(id, actor).await)
     }
     
-    pub async fn shutdown(&self, id: impl ToActorId) -> Result<(), ActorError> {
+    async fn shutdown(&self, id: impl ToActorId) -> Result<(), ActorError> {
         self.registry
             .deregister(&id.to_actor_id())
             .await
     }
     
-    pub async fn shutdown_all(&self) -> Result<(), ActorError> {
+    async fn shutdown_all(&self) -> Result<(), ActorError> {
         self.registry
             .shutdown_all()
             .await
     }
     
-    pub async fn find<A: Actor>(&self, id: impl ToActorId) -> Result<ActorRef<A>, ActorError> {
+    async fn find<A: Actor>(&self, id: impl ToActorId) -> Result<ActorRef<A>, ActorError> {
         let id = id.to_actor_id();
         let Some((_, actor)) = self.registry.find(&id).await else {
             return Err(ActorError::NotFoundActor { id })
@@ -56,7 +67,7 @@ impl ActorSystem {
         Ok(refs)
     }
     
-    pub async fn find_or<A: Actor, I: ToActorId, Fut>(&self, id: I, or_nothing: impl FnOnce(I) -> Fut) -> Result<ActorRef<A>, ActorError> 
+    async fn find_or<A: Actor, I: ToActorId, Fut>(&self, id: I, or_nothing: impl FnOnce(I) -> Fut) -> Result<ActorRef<A>, ActorError> 
         where Fut: Future<Output = A> + 'static + Sync + Send
     {
         let i = id.to_actor_id();

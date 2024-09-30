@@ -9,7 +9,7 @@ use uuid::Uuid;
 use lutetium::actor::{Actor, Context, Extension, FromContext, Handler, Message};
 use lutetium::actor::refs::{DynRef, RegularAction};
 use lutetium::errors::ActorError;
-use lutetium::system::ActorSystem;
+use lutetium::system::{ActorSystem, LutetiumActorSystem};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct PersonId(Uuid);
