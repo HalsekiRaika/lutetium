@@ -107,7 +107,7 @@ pub(crate) struct Factory;
 
 impl Factory {
     pub fn create<A: Actor>(actor: A, system: ActorSystem) -> Behavior<A> {
-        Behavior { actor, ctx: A::Context::track_with_system(system) }
+        Behavior::new(actor, A::Context::track_with_system(system))
     }
 }
 
