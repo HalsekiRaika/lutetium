@@ -21,7 +21,7 @@ pub struct ActorSystem {
 #[async_trait::async_trait(?Send)]
 pub trait LutetiumActorSystem: 'static + Sync + Send {
     async fn spawn<A: Actor>(&self, id: impl IntoActorId, actor: A) -> Result<ActorRef<A>, ActorError>;
-    async fn try_spawn<T: TryIntoActor>(&self, id: T::Identifier, into: T) -> Result<Result<ActorRef<T::Actor>, ActorError>, T::Rejection>;
+    async fn try_spawn<A: Actor, T: TryIntoActor<A>>(&self, id: T::Identifier, into: T) -> Result<Result<ActorRef<A>, ActorError>, T::Rejection>;
     async fn shutdown(&self, id: &impl ToActorId) -> Result<(), ActorError>;
     async fn shutdown_all(&self) -> Result<(), ActorError>;
     async fn find<A: Actor>(&self, id: impl ToActorId) -> Result<ActorRef<A>, ActorError>;
@@ -38,7 +38,7 @@ impl LutetiumActorSystem for ActorSystem {
         Ok(registered)
     }
     
-    async fn try_spawn<T: TryIntoActor>(&self, id: T::Identifier, into: T) -> Result<Result<ActorRef<T::Actor>, ActorError>, T::Rejection> {
+    async fn try_spawn<A: Actor,T: TryIntoActor<A>>(&self, id: T::Identifier, into: T) -> Result<Result<ActorRef<A>, ActorError>, T::Rejection> {
         let (id, actor) = into.try_into_actor(id)?;
         Ok(self.spawn(id, actor).await)
     }

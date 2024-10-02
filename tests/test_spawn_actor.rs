@@ -49,12 +49,11 @@ pub enum PersonEvent {
 
 impl Actor for Person { type Context = Context; }
 
-impl TryIntoActor for PersonCommand {
+impl TryIntoActor<Person> for PersonCommand {
     type Identifier = PersonId;
-    type Actor = Person;
     type Rejection = anyhow::Error;
 
-    fn try_into_actor(self, id: Self::Identifier) -> Result<(Self::Identifier, Self::Actor), Self::Rejection> {
+    fn try_into_actor(self, id: Self::Identifier) -> Result<(Self::Identifier, Person), Self::Rejection> {
         let person = Person { id, name: "into man".to_string(), age: 0, };
         Ok((id, person))
     }
@@ -103,7 +102,7 @@ async fn main() -> anyhow::Result<()> {
     
     assert_eq!(event, PersonEvent::IncrementedAge);
     
-    system.shutdown(id).await?;
+    system.shutdown(&id).await?;
     
     Ok(())
 }

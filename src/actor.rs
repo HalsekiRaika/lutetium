@@ -40,9 +40,8 @@ pub trait IntoActor: 'static + Sync + Send + Sized {
     fn into_actor(self) -> Self::Actor;
 }
 
-pub trait TryIntoActor: 'static + Sync + Send + Sized {
+pub trait TryIntoActor<A>: 'static + Sync + Send + Sized {
     type Identifier: IntoActorId;
-    type Actor: Actor;
     type Rejection;
-    fn try_into_actor(self, id: Self::Identifier) -> Result<(Self::Identifier, Self::Actor), Self::Rejection>;
+    fn try_into_actor(self, id: Self::Identifier) -> Result<(Self::Identifier, A), Self::Rejection>;
 }

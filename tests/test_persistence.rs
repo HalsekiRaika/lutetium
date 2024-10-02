@@ -33,12 +33,11 @@ pub enum MyCommand {
     Remove { k: String }
 }
 
-impl TryIntoActor for MyCommand {
+impl TryIntoActor<MyActor> for MyCommand {
     type Identifier = Uuid;
-    type Actor = MyActor;
     type Rejection = anyhow::Error;
 
-    fn try_into_actor(self, id: Self::Identifier) -> Result<(Self::Identifier, Self::Actor), Self::Rejection> {
+    fn try_into_actor(self, id: Self::Identifier) -> Result<(Self::Identifier, MyActor), Self::Rejection> {
         Ok((id, MyActor { id, data: Default::default() }))
     }
 }
