@@ -11,7 +11,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use uuid::Uuid;
 
 use lutetium::actor::{Handler, Message, TryIntoActor};
-use lutetium::actor::refs::{DynRef, RegularAction};
+use lutetium::actor::refs::{ActorRef, RegularAction};
 use lutetium::persistence::{Event, RecoverJournal, RecoverSnapShot, SnapShot, SelectionCriteria, PersistContext, PersistSystemExt};
 use lutetium::persistence::actor::PersistenceActor;
 use lutetium::persistence::errors::{DeserializeError, PersistError, SerializeError};
@@ -325,9 +325,15 @@ async fn persistence_actor_run() -> anyhow::Result<()> {
     
     system.shutdown(&id).await?;
     
-    let refs = system.spawn_with_recovery::<MyActor>(&id, None).await?;
+    let _refs = system.spawn_with_recovery::<MyActor>(&id, None).await?;
     
-    refs.shutdown().await?;
+    system.shutdown(&id).await?;
+    
+    let _refs: ActorRef<MyActor> = system.find_or_spawn_with_recovery(id, |_id| async move {
+        None
+    }).await?;
+    
+    system.shutdown(&id).await?;
     
     Ok(())
 }

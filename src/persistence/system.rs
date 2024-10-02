@@ -1,7 +1,9 @@
+use std::future::Future;
+
 use crate::actor::refs::ActorRef;
 use crate::actor::{Actor, ActorContext};
 use crate::errors::ActorError;
-use crate::identifier::IntoActorId;
+use crate::identifier::{IntoActorId, ToActorId};
 use crate::persistence::actor::PersistenceActor;
 use crate::persistence::fixture::Fixable;
 use crate::persistence::identifier::ToPersistenceId;
@@ -12,6 +14,9 @@ use crate::system::{ActorSystem, Behavior, LutetiumActorSystem};
 pub trait PersistSystemExt: LutetiumActorSystem {
     async fn spawn_with_recovery<A>(&self, id: &impl ToPersistenceId, recoverable: Option<A>) -> Result<ActorRef<A>, ActorError>
         where A: PersistenceActor + RecoveryMapping;
+    async fn find_or_spawn_with_recovery<A, I: ToActorId, Fut>(&self, id: I, or_nothing: impl FnOnce(I) -> Fut) -> Result<ActorRef<A>, ActorError>
+        where A: PersistenceActor + RecoveryMapping,
+              Fut: Future<Output = Option<A>> + Sync + Send;
 }
 
 #[async_trait::async_trait(?Send)]
@@ -40,6 +45,25 @@ impl PersistSystemExt for ActorSystem {
             .await?;
         
         Ok(registered)
+    }
+
+    async fn find_or_spawn_with_recovery<A, I, Fut>(&self, id: I, or_nothing: impl FnOnce(I) -> Fut) -> Result<ActorRef<A>, ActorError>
+    where
+        I: ToActorId,
+        A: PersistenceActor + RecoveryMapping,
+        Fut: Future<Output = Option<A>> + Sync + Send
+    {
+        let actor_id = id.to_actor_id();
+        let refs = match self.registry.find(&actor_id).await {
+            Some((_, refs)) => refs.downcast::<A>()?,
+            None => {
+                let persistence_id = id.to_actor_id().to_persistence_id();
+                let actor = or_nothing(id).await;
+                self.spawn_with_recovery(&persistence_id, actor).await?
+            }
+        };
+        
+        Ok(refs)
     }
 }
 
