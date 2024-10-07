@@ -18,17 +18,20 @@ pub struct ActorSystem {
     pub(crate) registry: Registry
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait::async_trait]
 pub trait LutetiumActorSystem: 'static + Sync + Send {
     async fn spawn<A: Actor>(&self, id: impl IntoActorId, actor: A) -> Result<ActorRef<A>, ActorError>;
     async fn try_spawn<A: Actor, T: TryIntoActor<A>>(&self, id: T::Identifier, into: T) -> Result<Result<ActorRef<A>, ActorError>, T::Rejection>;
     async fn shutdown(&self, id: &impl ToActorId) -> Result<(), ActorError>;
     async fn shutdown_all(&self) -> Result<(), ActorError>;
     async fn find<A: Actor>(&self, id: impl ToActorId) -> Result<ActorRef<A>, ActorError>;
-    async fn find_or<A: Actor, I: ToActorId, Fut>(&self, id: I, or_nothing: impl FnOnce(I) -> Fut) -> Result<ActorRef<A>, ActorError> where Fut: Future<Output = A> + 'static + Sync + Send;
+    async fn find_or<A: Actor, I: ToActorId, Fn, Fut>(&self, id: I, or_nothing: Fn) -> Result<ActorRef<A>, ActorError> 
+        where
+            Fn: FnOnce(I) -> Fut + 'static + Sync + Send,
+            Fut: Future<Output = A> + 'static + Sync + Send;
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait::async_trait]
 impl LutetiumActorSystem for ActorSystem {
     async fn spawn<A: Actor>(&self, id: impl IntoActorId, actor: A) -> Result<ActorRef<A>, ActorError> {
         let behavior = Factory::create(actor, self.clone());
@@ -64,8 +67,10 @@ impl LutetiumActorSystem for ActorSystem {
         Ok(refs)
     }
     
-    async fn find_or<A: Actor, I: ToActorId, Fut>(&self, id: I, or_nothing: impl FnOnce(I) -> Fut) -> Result<ActorRef<A>, ActorError> 
-        where Fut: Future<Output = A> + 'static + Sync + Send
+    async fn find_or<A: Actor, I: ToActorId, Fn, Fut>(&self, id: I, or_nothing: Fn) -> Result<ActorRef<A>, ActorError> 
+        where 
+            Fn: FnOnce(I) -> Fut + 'static + Sync + Send,
+            Fut: Future<Output = A> + 'static + Sync + Send
     {
         let i = id.to_actor_id();
         match self.registry.find(&i).await {

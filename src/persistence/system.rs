@@ -10,16 +10,17 @@ use crate::persistence::identifier::ToPersistenceId;
 use crate::persistence::mapping::RecoveryMapping;
 use crate::system::{ActorSystem, Behavior, LutetiumActorSystem};
 
-#[async_trait::async_trait(?Send)]
+#[async_trait::async_trait]
 pub trait PersistSystemExt: LutetiumActorSystem {
     async fn spawn_with_recovery<A>(&self, id: &impl ToPersistenceId, recoverable: Option<A>) -> Result<ActorRef<A>, ActorError>
         where A: PersistenceActor + RecoveryMapping;
-    async fn find_or_spawn_with_recovery<A, I: ToActorId, Fut>(&self, id: I, or_nothing: impl FnOnce(I) -> Fut) -> Result<ActorRef<A>, ActorError>
+    async fn find_or_spawn_with_recovery<A, I: ToActorId, Fn, Fut>(&self, id: I, or_nothing: Fn) -> Result<ActorRef<A>, ActorError>
         where A: PersistenceActor + RecoveryMapping,
-              Fut: Future<Output = Option<A>> + Sync + Send;
+              Fn: FnOnce(I) -> Fut + 'static + Sync + Send,
+              Fut: Future<Output = Option<A>> + 'static + Sync + Send;
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait::async_trait]
 impl PersistSystemExt for ActorSystem {
     async fn spawn_with_recovery<A>(&self, id: &impl ToPersistenceId, recoverable: Option<A>) -> Result<ActorRef<A>, ActorError>
     where
@@ -47,11 +48,12 @@ impl PersistSystemExt for ActorSystem {
         Ok(registered)
     }
 
-    async fn find_or_spawn_with_recovery<A, I, Fut>(&self, id: I, or_nothing: impl FnOnce(I) -> Fut) -> Result<ActorRef<A>, ActorError>
+    async fn find_or_spawn_with_recovery<A, I, Fn, Fut>(&self, id: I, or_nothing: Fn) -> Result<ActorRef<A>, ActorError>
     where
         I: ToActorId,
         A: PersistenceActor + RecoveryMapping,
-        Fut: Future<Output = Option<A>> + Sync + Send
+        Fn: FnOnce(I) -> Fut + 'static + Sync + Send,
+        Fut: Future<Output = Option<A>> + 'static + Sync + Send
     {
         let actor_id = id.to_actor_id();
         let refs = match self.registry.find(&actor_id).await {

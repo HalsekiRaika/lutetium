@@ -96,13 +96,17 @@ async fn main() -> anyhow::Result<()> {
         age: 21,
     };
     
-    let refs = system.spawn(id, person).await?;
+    let refs = system.spawn(id, person.clone()).await?;
     
     let event = refs.ask(PersonCommand::IncrementAge).await?;
     
     assert_eq!(event, PersonEvent::IncrementedAge);
     
     system.shutdown(&id).await?;
+    
+    let refs = system.find_or(id, |_id| async move {
+        person
+    }).await;
     
     Ok(())
 }
