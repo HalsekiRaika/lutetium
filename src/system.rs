@@ -8,7 +8,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use crate::actor::refs::ActorRef;
-use crate::actor::{Actor, ActorContext, TryIntoActor};
+use crate::actor::{Actor, ActorContext, FromMessage, Message, TryIntoActor};
 use crate::errors::ActorError;
 use crate::identifier::{IntoActorId, ToActorId};
 use crate::system::registry::Registry;
@@ -21,6 +21,8 @@ pub struct ActorSystem {
 #[async_trait::async_trait]
 pub trait LutetiumActorSystem: 'static + Sync + Send {
     async fn spawn<A: Actor>(&self, id: impl IntoActorId, actor: A) -> Result<ActorRef<A>, ActorError>;
+    async fn spawn_from<A: Actor, M: Message>(&self, from: M) -> Result<Result<ActorRef<A>, ActorError>, A::Rejection>
+        where A: FromMessage<M>;
     async fn try_spawn<A: Actor, T: TryIntoActor<A>>(&self, id: T::Identifier, into: T) -> Result<Result<ActorRef<A>, ActorError>, T::Rejection>;
     async fn shutdown(&self, id: &impl ToActorId) -> Result<(), ActorError>;
     async fn shutdown_all(&self) -> Result<(), ActorError>;
@@ -38,6 +40,19 @@ impl LutetiumActorSystem for ActorSystem {
         let registered = self.registry
             .register(id.into_actor_id(), behavior)
             .await?;
+        Ok(registered)
+    }
+
+
+    async fn spawn_from<A: Actor, M: Message>(&self, from: M) -> Result<Result<ActorRef<A>, ActorError>, A::Rejection>
+        where A: FromMessage<M>
+    {
+        let mut ctx = A::Context::track_with_system(self.clone());
+        let (id, actor) = A::once(from, &mut ctx).await?;
+        let behavior = Behavior::new(actor, ctx);
+        let registered = self.registry
+            .register(id.into_actor_id(), behavior)
+            .await;
         Ok(registered)
     }
     

@@ -7,7 +7,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use uuid::Uuid;
 
-use lutetium::actor::{Actor, Context, Handler, Message, TryIntoActor};
+use lutetium::actor::{Actor, Context, FromMessage, Handler, Message, TryIntoActor};
 use lutetium::actor::refs::{ActorRef, DynRef, ErrorFlattenAction};
 use lutetium::errors::ActorError;
 use lutetium::identifier::IntoActorId;
@@ -33,6 +33,24 @@ pub struct Person {
     id: PersonId,
     name: String,
     age: u32
+}
+
+pub struct SpawnPersonCommand {
+    name: String,
+    age: u32
+}
+
+impl Message for SpawnPersonCommand {}
+
+#[async_trait::async_trait]
+impl FromMessage<SpawnPersonCommand> for Person {
+    type Identifier = PersonId;
+    type Rejection = ActorError;
+
+    async fn once(msg: SpawnPersonCommand, _ctx: &mut Self::Context) -> Result<(Self::Identifier, Self), Self::Rejection> {
+        let id = PersonId::default();
+        Ok((id, Person { id, name: msg.name, age: msg.age, }))
+    }
 }
 
 pub enum PersonCommand {
@@ -112,7 +130,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn prepare_spawn() -> anyhow::Result<()> {
+async fn try_spawn() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer()
             .with_filter(tracing_subscriber::EnvFilter::new("test=trace,lutetium=trace"))
@@ -129,6 +147,28 @@ async fn prepare_spawn() -> anyhow::Result<()> {
     
     assert_eq!(event, PersonEvent::IncrementedAge);
     
+    refs.shutdown().await?;
+    
+    Ok(())
+}
+
+#[tokio::test]
+async fn spawn_from() -> anyhow::Result<()> {
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer()
+                  .with_filter(tracing_subscriber::EnvFilter::new("test=trace,lutetium=trace"))
+                  .with_filter(tracing_subscriber::filter::LevelFilter::TRACE),
+        )
+        .init();
+
+    let system = ActorSystem::builder().build();
+    
+    let refs: ActorRef<Person> = system.spawn_from(SpawnPersonCommand { name: "rechella".to_string(), age: 0 }).await??;
+
+    let event = refs.ask(PersonCommand::IncrementAge).await?;
+
+    assert_eq!(event, PersonEvent::IncrementedAge);
+
     refs.shutdown().await?;
     
     Ok(())
