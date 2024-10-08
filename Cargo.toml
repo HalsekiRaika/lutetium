@@ -8,7 +8,7 @@ name = "lutetium"
 description = "tokio based simple actor library"
 authors = ["ReiRokusanami <reirokusanami.rdh@gmail.com>"]
 repository = "https://github.com/HalsekiRaika/lutetium"
-version = "0.5.4"
+version = "0.5.5"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
