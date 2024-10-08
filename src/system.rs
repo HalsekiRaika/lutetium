@@ -36,9 +36,10 @@ pub trait LutetiumActorSystem: 'static + Sync + Send {
 #[async_trait::async_trait]
 impl LutetiumActorSystem for ActorSystem {
     async fn spawn<A: Actor>(&self, id: impl IntoActorId, actor: A) -> Result<ActorRef<A>, ActorError> {
-        let behavior = Factory::create(actor, self.clone());
+        let id = id.into_actor_id();
+        let behavior = Factory::create(actor, id.clone(), self.clone());
         let registered = self.registry
-            .register(id.into_actor_id(), behavior)
+            .register(id, behavior)
             .await?;
         Ok(registered)
     }
@@ -47,11 +48,13 @@ impl LutetiumActorSystem for ActorSystem {
     async fn spawn_from<A: Actor, M: Message>(&self, from: M) -> Result<Result<ActorRef<A>, ActorError>, A::Rejection>
         where A: FromMessage<M>
     {
-        let mut ctx = A::Context::track_with_system(self.clone());
+        let mut ctx = A::Context::track_with_system("prepare", self.clone());
         let (id, actor) = A::once(from, &mut ctx).await?;
+        let id = id.into_actor_id();
+        let ctx = A::Context::track_with_system(id.clone(), self.clone());
         let behavior = Behavior::new(actor, ctx);
         let registered = self.registry
-            .register(id.into_actor_id(), behavior)
+            .register(id, behavior)
             .await;
         Ok(registered)
     }
@@ -126,8 +129,8 @@ impl Clone for ActorSystem {
 pub(crate) struct Factory;
 
 impl Factory {
-    pub fn create<A: Actor>(actor: A, system: ActorSystem) -> Behavior<A> {
-        Behavior::new(actor, A::Context::track_with_system(system))
+    pub fn create<A: Actor>(actor: A, id: impl IntoActorId, system: ActorSystem) -> Behavior<A> {
+        Behavior::new(actor, A::Context::track_with_system(id, system))
     }
 }
 

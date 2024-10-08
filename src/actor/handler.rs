@@ -27,7 +27,7 @@ impl<A: Actor> Handler<Terminate> for A {
 
     async fn call(&mut self, _: Terminate, ctx: &mut Self::Context) -> Result<Self::Accept, Self::Rejection> {
         tracing::warn!("received terminate signal.");
-        ctx.shutdown();
+        ctx.shutdown().await;
         Ok(())
     }
 }

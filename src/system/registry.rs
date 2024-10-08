@@ -14,14 +14,19 @@ pub(crate) struct Registry(Arc<RwLock<HashMap<ActorId, AnyRef>>>);
 
 impl Registry {
     pub async fn register<A: Actor>(&self, id: ActorId, behavior: Behavior<A>) -> Result<ActorRef<A>, ActorError> {
-        if self.0.read().await.contains_key(&id) {
-            return Err(ActorError::AlreadySpawned { id })
+        if let Some((_, actor)) = self.find(&id).await { 
+            if actor.is_active().await {
+                return Err(ActorError::AlreadySpawned { id })
+            }
         }
-
-        let refs = LifeCycle::spawn(behavior).await?;
         
-        self.0.write().await
-            .insert(id.clone(), AnyRef::from(refs.clone()));
+        let refs = LifeCycle::spawn(self.clone(), behavior).await?;
+
+        if self.0.write().await
+            .insert(id.clone(), AnyRef::from(refs.clone())).is_some()
+        {
+            tracing::warn!("Actor during shutdown in the registry has been overwritten.");
+        }
         
         tracing::info!("Registered actor: {}", id);
         

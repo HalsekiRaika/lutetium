@@ -27,7 +27,7 @@ impl PersistSystemExt for ActorSystem {
         A: PersistenceActor + RecoveryMapping,
     {
         let id = id.to_persistence_id();
-        let RecoverableBehavior { mut recoverable, mut context } = Factory::create(recoverable, self.clone());
+        let RecoverableBehavior { mut recoverable, mut context } = Factory::create(recoverable, id.clone(), self.clone());
         let fixture = A::recover(&id, &mut context).await
             .map_err(|e| ActorError::External(Box::new(e)))?;
         
@@ -77,7 +77,7 @@ struct RecoverableBehavior<A: Actor> {
 struct Factory;
 
 impl Factory {
-    pub fn create<A: Actor>(recoverable: Option<A>, system: ActorSystem) -> RecoverableBehavior<A> {
-        RecoverableBehavior { recoverable, context: A::Context::track_with_system(system) }
+    pub fn create<A: Actor>(recoverable: Option<A>, id: impl IntoActorId, system: ActorSystem) -> RecoverableBehavior<A> {
+        RecoverableBehavior { recoverable, context: A::Context::track_with_system(id, system) }
     }
 }

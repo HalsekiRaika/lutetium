@@ -8,10 +8,13 @@ use crate::actor::{Actor, Handler, Message, Terminate};
 use crate::errors::ActorError;
 
 mod action;
+mod cell;
 
 pub use self::action::*;
+pub use self::cell::*;
 
 pub struct ActorRef<A: Actor> {
+    pub(crate) cell: ActorCell,
     pub(crate) channel: Arc<RefContext<A>>,
 }
 
@@ -20,7 +23,11 @@ impl<A: Actor> DynRef for ActorRef<A> {
     async fn shutdown(&self) -> Result<(), ActorError> {
         ErrorFlattenAction::ask(self, Terminate).await
     }
-    
+
+    async fn is_active(&self) -> bool {
+        self.cell.0.running_state.is_active().await
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -29,6 +36,7 @@ impl<A: Actor> DynRef for ActorRef<A> {
 impl<A: Actor> Clone for ActorRef<A> {
     fn clone(&self) -> Self {
         Self {
+            cell: self.cell.clone(),
             channel: Arc::clone(&self.channel),
         }
     }
@@ -39,8 +47,9 @@ pub(crate) struct RefContext<A> {
 }
 
 impl<A: Actor> ActorRef<A> {
-    pub(crate) fn new(sender: UnboundedSender<Box<dyn Applier<A>>>) -> ActorRef<A> {
+    pub(crate) fn new(cell: ActorCell, sender: UnboundedSender<Box<dyn Applier<A>>>) -> ActorRef<A> {
         Self {
+            cell,
             channel: Arc::new(RefContext { sender }),
         }
     }
@@ -166,6 +175,9 @@ pub trait DynRef: Any {
     /// 
     /// If you want a complete shutdown, use [`ActorSystem::shutdown`](crate::system::ActorSystem::shutdown).
     async fn shutdown(&self) -> Result<(), ActorError>;
+    
+    async fn is_active(&self) -> bool;
+    
     fn as_any(&self) -> &dyn Any;
 }
 
@@ -186,6 +198,10 @@ impl AnyRef {
 impl DynRef for AnyRef {
     async fn shutdown(&self) -> Result<(), ActorError> {
         self.0.shutdown().await
+    }
+
+    async fn is_active(&self) -> bool {
+        self.0.is_active().await
     }
     
     fn as_any(&self) -> &dyn Any {
