@@ -36,16 +36,19 @@ impl LifeCycle {
                 }
 
                 if ctx.state().available_shutdown().await {
-                    tracing::warn!("shutdown");
+                    tracing::warn!("actor has moved to a shutdown available status and will soon be removed from tracking.");
                     break;
                 }
             }
-            tracing::trace!("lifecycle ended.");
             
-            if let Err(e) = registry.deregister(ctx.id()).await {
+            tracing::trace!("actor was shutdown.");
+            
+            if let Err(e) = registry.untracked(ctx.id()).await {
                 tracing::error!("{}", e);
             }
-        }.instrument(tracing::info_span!("{}", actor_id = %span)));
+            
+            tracing::trace!("lifecycle ended.");
+        }.instrument(tracing::trace_span!("{}", actor_id = %span)));
 
         Ok(refs)
     }

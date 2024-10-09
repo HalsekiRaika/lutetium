@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+use std::time::Duration;
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -40,7 +41,29 @@ impl Handler<Command> for State {
 }
 
 #[tokio::test]
-async fn main() -> anyhow::Result<()> {
+async fn shutdown() -> anyhow::Result<()> {
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer()
+            .with_filter(tracing_subscriber::EnvFilter::new("test=trace,lutetium=trace"))
+            .with_filter(tracing_subscriber::filter::LevelFilter::TRACE),
+        )
+        .init();
+    
+    let system = ActorSystem::builder().build();
+    
+    let id = Uuid::now_v7();
+    let state = State { id, state: 1 };
+    system.spawn(id, state).await?;
+    
+    system.shutdown(&id).await?;
+    
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    
+    Ok(())
+}
+
+#[tokio::test]
+async fn shutdown_all() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer()
             .with_filter(tracing_subscriber::EnvFilter::new("test=trace,lutetium=trace"))
@@ -57,6 +80,8 @@ async fn main() -> anyhow::Result<()> {
     }
     
     system.shutdown_all().await?;
+    
+    tokio::time::sleep(Duration::from_millis(1000)).await;
     
     Ok(())
 }
@@ -76,6 +101,8 @@ async fn self_shutdown() -> anyhow::Result<()> {
     let refs = system.spawn(id, State { id, state: 5 }).await?;
     refs.tell(Command).await??;
     
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    
     Ok(())
 }
 
@@ -94,5 +121,8 @@ async fn refs_shutdown() -> anyhow::Result<()> {
     let refs = system.spawn(id, State { id, state: 5 }).await?;
 
     refs.shutdown().await?;
+    
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    
     Ok(())
 }
